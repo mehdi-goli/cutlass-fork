@@ -45,7 +45,10 @@ if(NOT "${DPCPP_SYCL_TARGET}" STREQUAL "")
   list(APPEND DPCPP_FLAGS "-fsycl-targets=${DPCPP_SYCL_TARGET};")
 endif()
 
-list(APPEND DPCPP_FLAGS "-fno-sycl-instrument-device-code")
+set(DPCPP_DISABLE_ITT_FOR_CUTLASS OFF CACHE BOOL "Disables linking of the Instrumentation and Tracing Technology (ITT) device libraries for VTune")
+if(DPCPP_DISABLE_ITT_FOR_CUTLASS)
+  list(APPEND DPCPP_FLAGS "-fno-sycl-instrument-device-code")
+endif()
 
 if(NOT "${DPCPP_USER_FLAGS}" STREQUAL "")
   list(APPEND DPCPP_FLAGS "${DPCPP_USER_FLAGS};")
