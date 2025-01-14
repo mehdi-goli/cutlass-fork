@@ -63,7 +63,7 @@ if(NOT "${DPCPP_SYCL_ARCH}" STREQUAL "")
 endif()
 
 if("${DPCPP_SYCL_TARGET}" STREQUAL "intel_gpu_pvc" OR "${DPCPP_SYCL_TARGET}" STREQUAL "spir64")
-  list(APPEND DPCPP_FLAGS "-Xspirv-translator;--spirv-ext=+SPV_INTEL_split_barrier")
+  list(APPEND DPCPP_FLAGS "-Xspirv-translator;-spirv-ext=+SPV_INTEL_split_barrier")
 endif()
 
 if(UNIX)
