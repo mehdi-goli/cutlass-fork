@@ -306,21 +306,19 @@ public:
     // the iteration over K dimention of B matrix (head_size) should be :
     auto iter_over_head_count = head_size / BLK_N;
     // subgroup arranged 8x1 to load (64x32) in one load(each 8x32)
-    Tensor prefetch_iter_k = params.mainloop.gmem_prefetch_k.get_pvc_tensor(
+    Tensor prefetch_iter_k_base = params.mainloop.gmem_prefetch_k.get_pvc_tensor(
          make_coord(sub_group_id * get<0>(PrefetchKTileSize{}),            // iteration 0/K/Hight/vertical
-                    0, //  iteration 1/N/W/Horisontal
-                    blk_l_coord),                                          // batch
-         // ?, ?, k, N swap k and n here to match cutlass
-         append<4>(make_shape(_1{}, _1{}, nblock_limit/*This is N*/), iter_over_head_count/* This is K*/), //(frag, iter_m, iter_n, iter_k)
-         // K, ?, N (The N should move along the N as get<0>(PrefetchKThrShape) load 32 each and we want 128 of N )
-         // The K should move along the dimmension of Block load as we lay 8x32 using the 8x1  shape for subgroups
-         // leading to load 64x32 of (K,N) per each prefetch (BLOCK_N SHows K DIM)
-         append<3>(make_shape(_, SG_N), BLK_N), seq<0, 1, 0>{}); // so 64 * iteration 0 (SG_N that is K which is vertical) and 32 * iteration 1 (N which is horisontal)
-
-      // V is a transposed matrix, So here the Sequense length is consumed, it is transposed so the consumed dimension looks like B matrix
-      // Hence, the Head size is the fast moving dimention and horisontal and sequence length is vertical.
-     // The prefetch only move along the sequence lenth. Here we call sequence length K since it get consumed and head size N since it stay
-     // subgroup arranged 4x2 to load (32x64) in one load(each 8x32)
+                    0,                                                     //  iteration 1/N/W/Horisontal
+                    blk_l_coord),                                          // batch 
+                     make_shape(_1{}, _1{}, _1{})); 
+    // adding the N dim along the dimention 1 Horizontal
+    Tensor prefetch_iter_NDIM = append_pvc_tensor<1>(prefetch_iter_k_base, nblock_limit, SG_N);  
+    // adding the K dim along the dimention 0 Vertical   
+    Tensor prefetch_iter_k = append_pvc_tensor<0>(prefetch_iter_NDIM, iter_over_head_count, BLK_N);  
+    // V is a transposed matrix, So here the Sequense length is consumed, it is transposed so the consumed dimension looks like B matrix
+    // Hence, the Head size is the fast moving dimention and horisontal and sequence length is vertical.
+    // The prefetch only move along the sequence lenth. Here we call sequence length K since it get consumed and head size N since it stay
+    // subgroup arranged 4x2 to load (32x64) in one load(each 8x32)
     Tensor prefetch_iter_2d_v = params.mainloop.gmem_prefetch_v.get_pvc_tensor(
          make_coord((sub_group_id / ATOM_N) * get<0>(PrefetchVTileSize{}), // iteration 0/K/Hight/vertical/ sequence lengh
                     head_size_coord,         //  iteration 1/N/W/Horisontal / Head size
@@ -338,7 +336,7 @@ public:
     for (int i = 0; i < Prefetch_per_workgroup; i++) {
       CUTLASS_PRAGMA_UNROLL
       for (int j = 0; j < iter_over_head_count; j++) {
-          prefetch(params.mainloop.gmem_prefetch_k, prefetch_iter_k(_, _, i, j));
+          prefetch(params.mainloop.gmem_prefetch_k, prefetch_iter_k(_, _, _, i, j));
       }
     }
 
@@ -422,7 +420,7 @@ public:
       if(nblock + Prefetch_per_workgroup < nblock_limit ) {
         CUTLASS_PRAGMA_UNROLL
         for (int j = 0; j < iter_over_head_count; j++) {
-            prefetch(params.mainloop.gmem_prefetch_k, prefetch_iter_k(_,_,nblock + Prefetch_per_workgroup, j));
+            prefetch(params.mainloop.gmem_prefetch_k, prefetch_iter_k(_, _, _, nblock + Prefetch_per_workgroup, j));
         }
         prefetch(params.mainloop.gmem_prefetch_v, prefetch_iter_v(_,_,_,nblock + Prefetch_per_workgroup));
       }
