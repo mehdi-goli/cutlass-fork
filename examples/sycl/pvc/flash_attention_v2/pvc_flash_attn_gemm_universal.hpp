@@ -114,7 +114,6 @@ public:
   using ElementO = typename CollectiveEpilogue::ElementO;
   using StrideO  = typename CollectiveEpilogue::StrideO;
   using ElementLSE = typename CollectiveEpilogue::ElementLSE;
-  using StrideLSE  = typename CollectiveEpilogue::StrideLSE;
   using EpilogueArguments = typename CollectiveEpilogue::Arguments;
   using EpilogueParams = typename CollectiveEpilogue::Params;
   static_assert(cute::is_same_v<ElementAccumulator, typename CollectiveEpilogue::ElementAccumulator>,
@@ -306,15 +305,21 @@ public:
     // the iteration over K dimention of B matrix (head_size) should be :
     auto iter_over_head_count = head_size / BLK_N;
     // subgroup arranged 8x1 to load (64x32) in one load(each 8x32)
-    Tensor prefetch_iter_k_base = params.mainloop.gmem_prefetch_k.get_pvc_tensor(
-         make_coord(sub_group_id * get<0>(PrefetchKTileSize{}),            // iteration 0/K/Hight/vertical
-                    0,                                                     //  iteration 1/N/W/Horisontal
-                    blk_l_coord),                                          // batch 
-                     make_shape(_1{}, _1{}, _1{})); 
-    // adding the N dim along the dimention 1 Horizontal
-    Tensor prefetch_iter_NDIM = append_pvc_tensor<1>(prefetch_iter_k_base, nblock_limit, SG_N);  
-    // adding the K dim along the dimention 0 Vertical   
-    Tensor prefetch_iter_k = append_pvc_tensor<0>(prefetch_iter_NDIM, iter_over_head_count, BLK_N);  
+    // Assume LD_T/LD_N will indicate ColumnMajor and RowMajor
+    auto k_prefetch_coordinate =
+        CollectiveMainloop::is_k_transposed ? make_coord((sub_group_id % ATOM_M) * get<0>(PrefetchKTileSize{}), // iteration 0/N/Hight/vertical
+                                                         (sub_group_id / ATOM_M) * get<1>(PrefetchKTileSize{}), //  iteration 1/K//Horisontal
+                                                         blk_l_coord)
+                                            : make_coord(sub_group_id * get<0>(PrefetchKTileSize{}), // iteration 0/K/Hight/vertical
+                                                         0,                                          //  iteration 1/N/W/Horisontal
+                                                         blk_l_coord);
+      // To load the 64x32
+      Tensor prefetch_iter_k_base = params.mainloop.gmem_prefetch_k.get_pvc_tensor(k_prefetch_coordinate, make_shape(_1{}, _1{}, _1{}));
+      // Adding iterator for the dimention N(sequence length) along 0 /Vertical
+      Tensor prefetch_iter_ndim = append_pvc_tensor< CollectiveMainloop::is_k_transposed? 0 : 1>(prefetch_iter_k_base, nblock_limit, SG_N);
+      // Adding iterator for  the dimension K (head size) along /Horizontal
+      Tensor prefetch_iter_k = append_pvc_tensor< CollectiveMainloop::is_k_transposed ? 1 : 0>(prefetch_iter_ndim, iter_over_head_count, BLK_N);
+
     // V is a transposed matrix, So here the Sequense length is consumed, it is transposed so the consumed dimension looks like B matrix
     // Hence, the Head size is the fast moving dimention and horisontal and sequence length is vertical.
     // The prefetch only move along the sequence lenth. Here we call sequence length K since it get consumed and head size N since it stay

@@ -140,7 +140,7 @@ struct CollectiveMmaAttention<
   using PrefetchQTileSize = decltype(ceil_div(Shape<Int<SG_M>, Int<SG_K>>{},PrefetchQThrShape{})); //16x32
   using PrefetchKTileSize = decltype(ceil_div(Shape<Int<SG_K>, Int<SG_N>>{},PrefetchKThrShape{})); //8x32
   using PrefetchVTileSize = decltype(ceil_div(Shape<Int<SG_K>, Int<SG_N>>{},PrefetchVThrShape{})); // 8x32
-  
+  static constexpr bool is_k_transposed = cute::detail::is_transpose_load<GmemTiledCopyK_>;
   static constexpr uint32_t MaxThreadsPerBlock = size(TiledMma{});
   using traits_load_Q = Copy_Traits<GmemTiledCopyQ, StrideQ>;
   using atom_load_Q = Copy_Atom<traits_load_Q, ElementQ>;
@@ -273,7 +273,6 @@ struct CollectiveMmaAttention<
     //
     // Mainloop
     //
-    int sub_group_id = get_sub_group_id();
     auto [m_coord, n_coord, k_coord, l_coord] = tile_coord;
     Tensor iter_2d_a = params.gmem_tiled_copy_q.get_pvc_tensor(
       make_coord(m_coord, 0, l_coord), tCrA_copy_view.shape());
@@ -341,7 +340,6 @@ struct CollectiveMmaAttention<
     //
     // Mainloop
     //
-    int sub_group_id = get_sub_group_id();
     auto [m_coord, n_coord, k_coord, l_coord] = tile_coord;
 
     Tensor iter_2d_b = params.gmem_tiled_copy_v.get_pvc_tensor(
