@@ -178,41 +178,33 @@ namespace flash
       //TODO:: temporarily using MaxOp as sycl::maxium<Element>() cause spilling
       workitem_reduce<Vec, FragsM, FragsN>(frag_s, max, MaxOp<Element>());
       subgroup_allreduce<Vec, FragsM, FragsN>(max, MaxOp<Element>());
+      static_assert(Vec==8 && FragsM==4);
       if(!is_first)
       {
+        auto g = syclcompat::get_nd_item<1>().get_sub_group();
         CUTLASS_PRAGMA_UNROLL
-        for (int x = 0; x < Vec; x++) 
-        { // TODO:: For now we need to unroll it to get SIMD4 Scheduling for exp operation. This will be removed once we find a fix 
-          CUTLASS_PRAGMA_UNROLL
-          for (int y = 0; y < FragsM; y += 4 ) 
-          {
-            Element curr_max_scale0 {(CausalMask && max(x, y    ) == -INFINITY) ? 0.f : max(x, y    ) * params.scale};
-            Element curr_max_scale1 {(CausalMask && max(x, y + 1) == -INFINITY) ? 0.f : max(x, y + 1) * params.scale};
-            Element curr_max_scale2 {(CausalMask && max(x, y + 2) == -INFINITY) ? 0.f : max(x, y + 2) * params.scale};
-            Element curr_max_scale3 { (CausalMask && max(x, y + 3) == -INFINITY)? 0.f : max(x, y + 3) * params.scale};
+        for (int x0 = 0; x0 < 2; x0++) 
+        {
+          int x = g.get_local_id()[0]/4*2 + x0;
+          int y = g.get_local_id()[0]%4;
 
-            const Element eq0 = sycl::mad(max_prev(x, y    ) , params.scale , -curr_max_scale0);
-            const Element eq1 = sycl::mad(max_prev(x, y + 1) , params.scale , -curr_max_scale1);
-            const Element eq2 = sycl::mad(max_prev(x, y + 2) , params.scale , -curr_max_scale2);
-            const Element eq3 = sycl::mad(max_prev(x, y + 3) , params.scale , -curr_max_scale3);
-            
-            const Element curr_scale0 = sycl::native::exp2(eq0);
-            const Element curr_scale1 = sycl::native::exp2(eq1);
-            const Element curr_scale2 = sycl::native::exp2(eq2);
-            const Element curr_scale3 = sycl::native::exp2(eq3);
-          
-            sum(x, y    ) *= curr_scale0;
-            sum(x, y + 1) *= curr_scale1;
-            sum(x, y + 2) *= curr_scale2;
-            sum(x, y + 3) *= curr_scale3;
-                
+          Element curr_max_scale {(CausalMask && max(x, y) == -INFINITY) ? 0.f : max(x, y) * params.scale};
+          const Element eq = sycl::mad(max_prev(x, y) , params.scale , -curr_max_scale);
+          const Element curr_scale = sycl::native::exp2(eq);
+
+          CUTLASS_PRAGMA_UNROLL
+          for (int x = x0; x < Vec; x+=2) 
+          {
             CUTLASS_PRAGMA_UNROLL
-            for (int z = 0; z < FragsN; z++)
-            {
-              out(x, y    , z) *= curr_scale0;
-              out(x, y + 1, z) *= curr_scale1;
-              out(x, y + 2, z) *= curr_scale2;
-              out(x, y + 3, z) *= curr_scale3;
+            for (int y = 0; y < FragsM; y++ )    
+            { 
+              const Element curr_scale_bcast = select_from_group(g, curr_scale, (x-x0)*2+y);
+              sum(x, y) *= curr_scale_bcast;
+              CUTLASS_PRAGMA_UNROLL
+              for (int z = 0; z < FragsN; z++)
+              {
+                out(x, y, z) *= curr_scale_bcast;
+              }
             }
           }
         }
