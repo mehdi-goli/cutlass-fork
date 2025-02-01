@@ -42,6 +42,7 @@
 #include "cutlass/epilogue/fusion/callbacks.hpp"
 #include "cutlass/epilogue/fusion/sm90_visitor_tma_warpspecialized.hpp"
 #include "cutlass/detail/layout.hpp"
+#include "online_softmax.hpp"
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -190,7 +191,7 @@ public:
     TileCoord tile_coord,
     FragOut &out,
     FragMax const &max,
-    FragSum const &sum,
+    FragSum  &sum,
     TiledMma tiled_mma,
     ElementLSE const& softmax_scale
   ) {
@@ -228,7 +229,7 @@ public:
     for (int x = 0; x < FragmentSize; x++) {
       CUTLASS_PRAGMA_UNROLL
       for (int y = 0; y < FragsM; y++) {
-        
+        sum(x, y) = sub_group_reduce_add(sum(x, y));
         ElementLSE curr_sum = sum(x, y);
         ElementO scale = (curr_sum == 0.f || curr_sum != curr_sum) ? 1.f : sycl::native::recip(curr_sum);
         tLSEr(x, y) = curr_sum == 0.f ? -INFINITY : max(x, y) * softmax_scale + sycl::native::log(curr_sum);
