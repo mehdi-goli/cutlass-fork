@@ -143,25 +143,6 @@ namespace flash
     }
 
     template <
-        int Vec,
-        int FragsM,
-        int FragsN,
-        class FragDst>
-      // reduce across the sub_group to get the final output
-    CUTLASS_DEVICE static void subgroup_allreduce_sum(FragDst &dst)
-    {
-      CUTLASS_PRAGMA_UNROLL
-      for (int y = 0; y < FragsM; y++)
-      {
-        CUTLASS_PRAGMA_UNROLL
-        for (int x = 0; x < Vec; x++)
-        {
-          dst(x, y) = sub_group_reduce_add(dst(x, y));
-        }
-      }
-    }
-
-    template <
         bool CausalMask,
         int Vec,
         int FragsM,

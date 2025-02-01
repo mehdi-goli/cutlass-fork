@@ -433,9 +433,6 @@ public:
     //  barrier_wait(barrier_scope);
     }
 
-    // Reduce the sum of exponents across the subgroup before scaling/normalizing output
-    flash::Softmax<ElementAccumulator>::template subgroup_allreduce_sum<Vec, FragsM, FragsN>(sum_reg);
-
     CollectiveEpilogue epilogue{params.epilogue, shared_storage.epilogue};
 
     epilogue(
