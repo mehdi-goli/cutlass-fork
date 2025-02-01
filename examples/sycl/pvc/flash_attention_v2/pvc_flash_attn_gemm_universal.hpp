@@ -354,10 +354,11 @@ public:
     TiledMma tiled_mma;
     Tensor out_reg = partition_fragment_C(tiled_mma, take<0, 2>(blk_shape));
     // the max reg and sum reg each contains a 2d tesnor for 8 x 4 This is number of sequence lenght process per subgroup
-    Tensor max_reg = make_tensor<ElementAccumulator>(Shape<Int<Vec>, Int<FragsM>>{});
+   // Tensor max_reg = make_tensor<ElementAccumulator>(Shape<Int<Vec>, Int<FragsM>>{});
+   // Tensor max_reg = make_tensor<ElementAccumulator>(Shape<Int<2>>{});
+    sycl::vec<ElementAccumulator, 2> max_reg{-INFINITY, -INFINITY};
     Tensor sum_reg = make_tensor<ElementAccumulator>(Shape<Int<Vec>, Int<FragsM>>{});
-
-    fill(max_reg, -INFINITY);
+    //fill(max_reg, -INFINITY);
     clear(sum_reg);
     clear(out_reg);
     // Perform the collective scoped MMA
@@ -365,12 +366,12 @@ public:
     // when causal mask is true.It is not possible to set the scope
     // of the barrier to workgroup level as the number n block is
     // different for each subgroup due to triangular nature of causal based operation
-    static constexpr int barrier_scope = CausalMask ? 3 : 2;
+   // static constexpr int barrier_scope = CausalMask ? 3 : 2;
 
     // MAIN LOOP: loop over K and V, perform fused attention + online softmax
     for (int nblock = 0, load_idx = 0; nblock < nblock_limit; nblock++,
               load_idx += get<1>(subgroup_shape)) {
-      barrier_arrive(barrier_scope);
+     // barrier_arrive(barrier_scope);
       // 1) Load K (performed inside mmaQK)
       // 2) Create Tensor S
       auto gK = local_tile(mK_nk, blk_shape, make_coord(0, 0, _), Step<X, _1, _1>{});
@@ -429,11 +430,11 @@ public:
         }
         prefetch(params.mainloop.gmem_prefetch_v, prefetch_iter_v(_,_,_,nblock + Prefetch_per_workgroup));
       }
-      barrier_wait(barrier_scope);
+    //  barrier_wait(barrier_scope);
     }
 
     // Reduce the sum of exponents across the subgroup before scaling/normalizing output
-    flash::Softmax<ElementAccumulator>::template subgroup_allreduce<Vec, FragsM, FragsN>(sum_reg, sycl::plus<>());
+    flash::Softmax<ElementAccumulator>::template subgroup_allreduce_sum<Vec, FragsM, FragsN>(sum_reg);
 
     CollectiveEpilogue epilogue{params.epilogue, shared_storage.epilogue};
 

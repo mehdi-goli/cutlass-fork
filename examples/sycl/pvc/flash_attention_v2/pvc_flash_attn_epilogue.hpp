@@ -223,7 +223,8 @@ public:
     auto m_offset = m_coord * BLK_M + (get_sub_group_id() / ATOM_N) * SG_M;
     auto n_offset = n_coord * BLK_N + (get_sub_group_id() % ATOM_N) * SG_N;
     auto l_offset = l_coord;
-
+    auto g = syclcompat::get_nd_item<1>().get_sub_group();
+    int x = g.get_local_id()[0] ;
     CUTLASS_PRAGMA_UNROLL
     for (int x = 0; x < FragmentSize; x++) {
       CUTLASS_PRAGMA_UNROLL
@@ -231,7 +232,8 @@ public:
         
         ElementLSE curr_sum = sum(x, y);
         ElementO scale = (curr_sum == 0.f || curr_sum != curr_sum) ? 1.f : sycl::native::recip(curr_sum);
-        tLSEr(x, y) = curr_sum == 0.f ? -INFINITY : max(x, y) * softmax_scale + sycl::native::log(curr_sum);
+        const ElementLSE curr_scale_bcast = group_broadcast(g, max[(y*FragmentSize + x )/16],  (y*FragmentSize +x) % 16);
+        tLSEr(x, y) = curr_sum == 0.f ? -INFINITY : curr_scale_bcast * softmax_scale + sycl::native::log(curr_sum);
         
         CUTLASS_PRAGMA_UNROLL
         for (int z = 0; z < FragsN; z++) {
