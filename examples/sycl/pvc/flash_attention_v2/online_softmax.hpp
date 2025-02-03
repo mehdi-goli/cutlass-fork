@@ -84,30 +84,26 @@ namespace flash
         class FragMax,
         class FragSum
         >
-    CUTLASS_DEVICE static constexpr void scale_exp_log2(FragAcc &acc, FragMax const max,  FragSum& sum, Element const scale)
+    CUTLASS_DEVICE static constexpr void scale_exp_log2(FragAcc &frag_s, FragMax const max,  FragSum& sum, Element const scale)
     {
       auto g = syclcompat::get_nd_item<1>().get_sub_group();
-      int x = g.get_local_id()[0] ;
       CUTLASS_PRAGMA_UNROLL
       for (int y = 0; y < FragsM; y++)
       { 
         CUTLASS_PRAGMA_UNROLL
-        for (int x = 0; x < Vec; x++)
-        { 
-          Element max_scaled = (group_broadcast(g, max[(y*Vec + x )/16],  (y*Vec +x) % 16))* scale;
-          if (CausalMask && max_scaled == -INFINITY)
-          {
-            max_scaled = 0.f;
-          }
-
+        for (int x = 0; x < Vec; x+=2)
+        { int indx = ((y * Vec) + x);
+          auto max_scaled = (group_broadcast(g, max,  (indx/2) % 16))* scale;
           CUTLASS_PRAGMA_UNROLL
-          for (int z = 0; z < FragsN; z += 2)
-          { 
-            Element eq0 = (acc(x, y, z) * scale - max_scaled);
-            Element eq1 = (acc(x, y, z + 1) * scale - max_scaled);
-            acc(x, y, z) = sycl::native::exp2(eq0);
-            acc(x, y, z + 1) = sycl::native::exp2(eq1);
-            sum(x, y) += (acc(x, y, z) + acc(x, y, z + 1));
+          for (int z = 0; z < FragsN; z++)
+          {         
+            auto base_indx = indx + (z * Vec * FragsM); 
+            sycl::vec<Element, 2> eq ={frag_s(base_indx) * scale - max_scaled[0], 
+                                       frag_s(base_indx + 1) * scale - max_scaled[1]};
+            frag_s(base_indx) = sycl::native::exp2(eq[0]);
+            frag_s(base_indx + 1) = sycl::native::exp2(eq[1]);
+            sum(indx) += frag_s(base_indx); 
+            sum(indx +1) += frag_s(base_indx + 1);
           }
         }
       }
@@ -122,26 +118,26 @@ namespace flash
     CUTLASS_DEVICE static void reduce_max(FragSrc const &src, FragMax& max)
     {       
       auto g = syclcompat::get_nd_item<1>().get_sub_group();
-      Element maxptr[Vec*FragsM];
+      sycl::vec<Element,2> maxptr[Vec*FragsM/2];
       CUTLASS_PRAGMA_UNROLL
       for (int y = 0; y < FragsM; y++)
       {
         CUTLASS_PRAGMA_UNROLL
-        for (int x = 0; x < Vec; x++)     
+        for (int x = 0; x < Vec; x+=2)
         {
-          maxptr[x +  y* Vec] = (group_broadcast(g, max[(y*Vec + x )/16],  (y*Vec +x) % 16));
+          int indx = ((y * Vec) + x) / 2;
+          maxptr[indx] = group_broadcast(g, max, indx % 16);
           CUTLASS_PRAGMA_UNROLL
           for (int z = 0; z < FragsN; z++)
-          {
-            maxptr[x +  y* Vec] = sycl::max(maxptr[x +  y* Vec], src(x, y, z));
+          { auto base_indx = 2 *indx + (z * Vec * FragsM); 
+            maxptr[indx] = sycl::max(maxptr[indx],  sycl::vec<Element,2>{src(base_indx),src(base_indx + 1)});
           }
-          maxptr[x+ y*Vec] = sub_group_reduce_max(maxptr[x+ y*Vec]);
+          maxptr[indx] = {sub_group_reduce_max(maxptr[indx][0]), sub_group_reduce_max(maxptr[indx][1])};
         }
       }
-      int x = g.get_local_id()[0] ;
-      max = {maxptr[x], maxptr[x+16]};
+      int idx = g.get_local_id()[0] ;
+      max = maxptr[idx];
     }
-
     template <
         bool CausalMask,
         int Vec,
@@ -158,23 +154,32 @@ namespace flash
       static_assert(Vec==8 && FragsM==4);
       if(!is_first) {
         auto g = syclcompat::get_nd_item<1>().get_sub_group();
-        auto curr_max_scale = max * params.scale;
-        auto curr_scale = sycl::native::exp2(max_prev* params.scale - curr_max_scale); 
+        sycl::vec<Element, 2> max_scale{max * params.scale};
+        sycl::vec<Element, 2> exp_scale{sycl::native::exp2(max_prev * params.scale - max_scale)};
+        int idx = g.get_local_id()[0] ;
+        
+        
         CUTLASS_PRAGMA_UNROLL
         for (int y = 0; y < FragsM; y++ )     //4
         { 
           CUTLASS_PRAGMA_UNROLL
-          for (int x =0; x < Vec; x++)  //8
+          for (int x =0; x < Vec; x+=2)  //8
           {
-            const Element curr_scale_bcast = group_broadcast(g, curr_scale[(y*Vec + x )/16],  (y*Vec +x) % 16);
-            Element max_scaled = (group_broadcast(g, max[(y*Vec + x )/16],  (y*Vec +x) % 16))* params.scale;
-            sum(x, y) *= curr_scale_bcast;
+            int indx = ((y * Vec) + x);
+            auto max_scale_bcast = group_broadcast(g, max_scale, (indx/2) % 16);
+            auto exp_scale_bcast = group_broadcast(g, exp_scale, (indx/2) % 16);
+            sum(indx) *= exp_scale_bcast[0];
+            sum(indx + 1) *= exp_scale_bcast[1];
             CUTLASS_PRAGMA_UNROLL
-            for (int z = 0; z < FragsN; z++) //2
+            for (int z = 0; z < FragsN; z++)
             {
-              out(x, y, z) *= curr_scale_bcast;
-              frag_s(x, y, z) = sycl::native::exp2((frag_s(x, y, z) * params.scale - max_scaled));
-              sum(x, y) += frag_s(x, y, z);
+              auto base_indx = indx + (z * Vec * FragsM); 
+              out(base_indx)*= exp_scale_bcast[0];
+              out(base_indx + 1 )*= exp_scale_bcast[1];
+              frag_s(base_indx) = sycl::native::exp2((frag_s(base_indx) * params.scale - max_scale_bcast[0]));
+              frag_s(base_indx + 1) = sycl::native::exp2((frag_s(base_indx +1) * params.scale - max_scale_bcast[1]));
+              sum(indx) += frag_s(base_indx); 
+              sum(indx + 1) += frag_s(base_indx + 1);
             }
           }
         }
