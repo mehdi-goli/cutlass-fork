@@ -383,7 +383,7 @@ public:
       collective_mma.mmaQK(tile_coord_QK, tSr, gQ, gK, tSr, head_size / get<1>(subgroup_shape), params.mainloop);
 
       // Apply causal mask
-      if constexpr (CausalMask)
+      if  (CausalMask && nblock ==nblock_limit-1)
       {
         // mask the elements of each tile where j > i
         int col_idx = item_id + load_idx;
