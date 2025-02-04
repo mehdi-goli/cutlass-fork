@@ -143,7 +143,7 @@ public:
   static constexpr int Vec = (get<0>(MmaAtomShape()) * get<1>(MmaAtomShape())) / SubgroupSize; //8
   static constexpr int FragsM = get<0>(SubgroupTileShape{}) / get<0>(MmaAtomShape());  // 4
   static constexpr int FragsN = get<1>(SubgroupTileShape{}) / get<1>(MmaAtomShape());  // 2
-  
+
   // Kernel level shared memory storage
   struct SharedStorage {
     using EpilogueTensorStorage = typename CollectiveEpilogue::TensorStorage;
@@ -365,12 +365,12 @@ public:
     // when causal mask is true.It is not possible to set the scope
     // of the barrier to workgroup level as the number n block is
     // different for each subgroup due to triangular nature of causal based operation
-   // static constexpr int barrier_scope = CausalMask ? 3 : 2;
+    static constexpr int barrier_scope = CausalMask ? 3 : 2;
 
     // MAIN LOOP: loop over K and V, perform fused attention + online softmax
     for (int nblock = 0, load_idx = 0; nblock < nblock_limit; nblock++,
               load_idx += get<1>(subgroup_shape)) {
-     // barrier_arrive(barrier_scope);
+      barrier_arrive(barrier_scope);
       // 1) Load K (performed inside mmaQK)
       // 2) Create Tensor S
       auto gK = local_tile(mK_nk, blk_shape, make_coord(0, 0, _), Step<X, _1, _1>{});
@@ -429,7 +429,7 @@ public:
         }
         prefetch(params.mainloop.gmem_prefetch_v, prefetch_iter_v(_,_,_,nblock + Prefetch_per_workgroup));
       }
-    //  barrier_wait(barrier_scope);
+      barrier_wait(barrier_scope);
     }
 
     CollectiveEpilogue epilogue{params.epilogue, shared_storage.epilogue};

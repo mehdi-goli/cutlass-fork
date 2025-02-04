@@ -168,8 +168,7 @@ namespace flash
         auto g = syclcompat::get_nd_item<1>().get_sub_group();
         sycl::vec<Element, 2> max_scale{max * params.scale};
         sycl::vec<Element, 2> exp_scale{sycl::native::exp2(max_prev * params.scale - max_scale)};
-        int idx = g.get_local_id()[0] ;
-        
+        int idx = g.get_local_id()[0];      
         CUTLASS_PRAGMA_UNROLL
         for (int y = 0; y < FragsM; y++ )
         { 
