@@ -143,8 +143,7 @@ public:
   static constexpr int Vec = (get<0>(MmaAtomShape()) * get<1>(MmaAtomShape())) / SubgroupSize; //8
   static constexpr int FragsM = get<0>(SubgroupTileShape{}) / get<0>(MmaAtomShape());  // 4
   static constexpr int FragsN = get<1>(SubgroupTileShape{}) / get<1>(MmaAtomShape());  // 2
-  static_assert(FragsM % 4 == 0, "For better Softmax EXP scheduling operation SubgroupTileShape for M / MmaAtomShape for M must be multipe of 4." );
-
+  
   // Kernel level shared memory storage
   struct SharedStorage {
     using EpilogueTensorStorage = typename CollectiveEpilogue::TensorStorage;
