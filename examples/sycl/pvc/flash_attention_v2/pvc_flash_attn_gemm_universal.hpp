@@ -352,12 +352,11 @@ public:
     // Allocate the tiled_mma and the accumulators for the (M,N) subgroup_shape
     TiledMma tiled_mma;
     Tensor out_reg = partition_fragment_C(tiled_mma, take<0, 2>(blk_shape));
-    // the max reg and sum reg each contains a 2d tesnor for 8 x 4 This is number of sequence lenght process per subgroup
-   // Tensor max_reg = make_tensor<ElementAccumulator>(Shape<Int<Vec>, Int<FragsM>>{});
-   // Tensor max_reg = make_tensor<ElementAccumulator>(Shape<Int<2>>{});
+    // There are 16 workitem and 32 max per subgroup, each worktime containt 2 max and cumulatively, they calculate the max per subgroup  
     sycl::vec<ElementAccumulator, 2> max_reg{-INFINITY, -INFINITY};
+    //The sum reg each contains a 2d tesnor for 8 x 4 This is number of sequence lenght process per subgroup
     Tensor sum_reg = make_tensor<ElementAccumulator>(Shape<Int<Vec>, Int<FragsM>>{});
-    //fill(max_reg, -INFINITY);
+
     clear(sum_reg);
     clear(out_reg);
     // Perform the collective scoped MMA
@@ -382,7 +381,7 @@ public:
       collective_mma.mmaQK(tile_coord_QK, tSr, gQ, gK, tSr, head_size / get<1>(subgroup_shape), params.mainloop);
 
       // Apply causal mask
-      if  (CausalMask && nblock ==nblock_limit-1)
+      if  (CausalMask && nblock == nblock_limit-1)
       {
         // mask the elements of each tile where j > i
         int col_idx = item_id + load_idx;
