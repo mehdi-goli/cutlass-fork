@@ -86,18 +86,11 @@ namespace flash
     CUTLASS_DEVICE static constexpr void scale_exp_log2(FragAcc &frag_s, FragMax const max,  FragSum& sum, Params const params)
     {
       auto g = syclcompat::get_nd_item<1>().get_sub_group();
-      // FIXME: The performance would vary depending on the location we scale the max 
-      // for causal true or false while code generated is the same. Temporarily diverging 
-      // the path to avoid performance divergence
-      const auto max_scale = (CausalMask)? max * params.scale : max;
+      const auto max_scale =  max * params.scale;
       CUTLASS_PRAGMA_UNROLL
       for (int indx = 0; indx < Vec*FragsM; indx++)
       { 
-        // FIXME: The performance would vary depending on the location we scale the max 
-        // for causal true or false while code generated is the same. Temporarily diverging 
-        // the path to avoid performance divergence
-        const auto max_scale_bcast = (CausalMask) ?(group_broadcast(g, max_scale, (indx ) % 16)) 
-                                                  : (group_broadcast(g, max_scale, (indx ) % 16))* params.scale;
+        const auto max_scale_bcast =(group_broadcast(g, max_scale, (indx ) % 16));
         CUTLASS_PRAGMA_UNROLL 
         for (int z = 0; z < FragsN; z++)
         {         

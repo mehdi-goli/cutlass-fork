@@ -33,5 +33,4 @@
 int main(int argc, const char** argv)
 {
  return FMHAConfig<true, 128, Shape<_128, _128, _64>, Shape<_8, _2, _1>>::run(argc, argv);
- 
 }
