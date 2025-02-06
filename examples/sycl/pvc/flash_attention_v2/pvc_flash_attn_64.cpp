@@ -450,7 +450,7 @@ int main(int argc, const char** argv)
                Tile<Layout<Shape<_8, _4, _4>, Stride<_1, _32, _8>>,
                     Layout<Shape<_16, _2, _2>, Stride<_1, _32, _16>>, _32>>;
 
-  constexpr int PipelineStages = 2;
+  constexpr int PipelineStages = 1;
   using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVC<PipelineStages>;
   using EpilogueDispatchPolicy = cutlass::epilogue::IntelPVCEpilogue;
 

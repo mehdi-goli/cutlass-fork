@@ -118,23 +118,22 @@ namespace flash
     CUTLASS_DEVICE static void reduce_max(FragSrc &src, FragMax& max, Params const & params)
     {       
       auto g = syclcompat::get_nd_item<1>().get_sub_group();
-      sycl::marray<Element, Vec * FragsM> maxptr;
-     
+      CUTLASS_PRAGMA_UNROLL
+      for (int indx = 0; indx < Vec*FragsM; indx++)
+      {
+        auto maxptr = group_broadcast(g, max, indx % 16);
         CUTLASS_PRAGMA_UNROLL
-        for (int indx = 0; indx < Vec*FragsM; indx++)
-        {
-          maxptr[indx] = group_broadcast(g, max, indx % 16);
-          CUTLASS_PRAGMA_UNROLL
-          for (int z = 0; z < FragsN; z++)
-          { 
-            auto base_indx = indx + (z * Vec * FragsM); 
-            maxptr[indx] = sycl::max(maxptr[indx], src(base_indx));
-            src(base_indx) *= params.scale;
-          }
-          maxptr[indx] = {sub_group_reduce_max(maxptr[indx])};
+        for (int z = 0; z < FragsN; z++)
+        { 
+          auto base_indx = indx + (z * Vec * FragsM); 
+          maxptr = sycl::max(maxptr, src(base_indx));
+          src(base_indx) *= params.scale;
         }
-      int idx = g.get_local_id()[0];
-      max = maxptr[idx];
+        maxptr = {sub_group_reduce_max(maxptr)};
+        if (indx == g.get_local_id()[0]) {
+          max = maxptr;
+        }
+      }
     }
     template <
         bool CausalMask,
