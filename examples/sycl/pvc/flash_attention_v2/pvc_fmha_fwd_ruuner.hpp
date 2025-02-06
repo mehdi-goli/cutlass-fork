@@ -28,6 +28,8 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  **************************************************************************************************/
+#pragma once
+
 #include "cutlass/epilogue/collective/default_epilogue.hpp"
 #include "cutlass/epilogue/fusion/xe_callbacks.hpp"
 #include "cutlass/gemm/device/gemm_universal_adapter.h"
@@ -58,11 +60,11 @@ struct Options {
   int batch, num_heads, seq_len, head_size, iterations;
   float softmax_scale;
 
-  Options():
+  Options(bool causal, int head_dim):
     help(false),
     error(false),
-    is_causal(false),
-    batch(32), num_heads(16), seq_len(512), head_size(128), iterations(100),
+    is_causal(causal),
+    batch(32), num_heads(16), seq_len(512), head_size(head_dim), iterations(100),
     softmax_scale(1.f)
   { }
 
@@ -75,14 +77,9 @@ struct Options {
       return;
     }
 
-    if (cmd.check_cmd_line_flag("is_causal")) {
-      is_causal = true;
-    }
-
     cmd.get_cmd_line_argument("batch", batch, 32);
     cmd.get_cmd_line_argument("num_heads", num_heads, 16);
     cmd.get_cmd_line_argument("seq_len", seq_len, 512);
-    cmd.get_cmd_line_argument("head_size", head_size, 128);
     cmd.get_cmd_line_argument("iterations", iterations, 100);
 
     softmax_scale = 1 / sqrt(static_cast<float>(head_size));
@@ -94,11 +91,9 @@ struct Options {
     out << "PVC Flash Attention v2 Example\n\n"
       << "Options:\n\n"
       << "  --help                      If specified, displays this usage statement\n\n"
-      << "  --is_causal                 Apply Causal Mask to the output of first Matmul\n"
       << "  --batch=<int>               Sets the Batch Size of the Multi-Head Self Attention module\n"
       << "  --num_heads=<int>           Sets the Number of Attention Heads of the Multi-Head Self Attention module\n"
       << "  --seq_len=<int>             Sets the Sequence length of the Multi-Head Self Attention module\n"
-      << "  --head_size=<int>           Sets the Attention Head dimension of the Multi-Head Self Attention module\n"
       << "  --iterations=<int>          Iterations\n\n";
 
     return out;
@@ -399,13 +394,15 @@ struct ExampleRunner {
 
 };
 
-int main(int argc, const char** argv)
-{
+template<bool Casual, int Head_Dim, typename TileShape, typename SubgroupShape> struct FMHAConfig {
+static int  run(int argc, const char** argv) {
+
+  
   //
   // Parse options
   //
 
-  Options options;
+  Options options(Casual, Head_Dim);
 
   options.parse(argc, argv);
 
@@ -427,12 +424,6 @@ int main(int argc, const char** argv)
   // information is used by the underlying kernel.
   cutlass::KernelHardwareInfo hw_info;
 
-  // Change device_id to another value if you are running on a machine with multiple GPUs and wish
-  // to use a GPU other than that with device ID 0.
-  hw_info.sm_count = cutlass::KernelHardwareInfo::query_device_multiprocessor_count(hw_info.device_id);
-
-  bool passed;
-
   // The code section below describes datatype for input, output matrices and computation between
   // elements in input matrices.
   using ElementAccumulator = float;                   // <- data type of accumulator
@@ -441,16 +432,14 @@ int main(int argc, const char** argv)
   using ElementInputKV = bfloat16_t;                        // <- data type of elements in input matrix B
   using ElementOutput = float;                        // <- data type of elements in output matrix D
 
-  // Workgroup-level tile
-  using TileShape = Shape<_128, _128, _64>;
 
   using TiledMma =
       TiledMMA<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
-               Layout<Shape<_8, _2, _1>, Stride<_2, _1, _0>>,
+               Layout<SubgroupShape, Stride<_2, _1, _0>>,
                Tile<Layout<Shape<_8, _4, _4>, Stride<_1, _32, _8>>,
                     Layout<Shape<_16, _2, _2>, Stride<_1, _32, _16>>, _32>>;
 
-  constexpr int PipelineStages = 1;
+  constexpr int PipelineStages = 2;
   using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVC<PipelineStages>;
   using EpilogueDispatchPolicy = cutlass::epilogue::IntelPVCEpilogue;
 
@@ -462,7 +451,6 @@ int main(int argc, const char** argv)
           ElementOutput,
           XE_2D_U32x8x16_ST_N>;
 
-  if(options.is_causal) {
     using GmemTiledCopyQ = XE_2D_U16x16x32_LD_N;
     using GmemTiledCopyK = XE_2D_U16x16x16_LD_T;
     using GmemTiledCopyV = XE_2D_U16x32x32_LD_V;
@@ -480,7 +468,7 @@ int main(int argc, const char** argv)
             GmemTiledCopyQ,  // Q
             GmemTiledCopyK,  // K
             GmemTiledCopyV,  // V,
-            true
+            Casual
     >;
 
     using GemmKernel = cutlass::gemm::kernel::GemmUniversalAttention<
@@ -488,41 +476,10 @@ int main(int argc, const char** argv)
     CollectiveMainloop,
     CollectiveEpilogue
     >;
-
+    
     ExampleRunner<GemmKernel> runner;
 
     runner.run(options, hw_info);
-  } else {
-    using GmemTiledCopyQ = XE_2D_U16x16x32_LD_N;
-    using GmemTiledCopyK = XE_2D_U16x16x16_LD_T;
-    using GmemTiledCopyV = XE_2D_U16x32x32_LD_V;
-    // Mainloop
-    using CollectiveMainloop = cutlass::gemm::collective::CollectiveMmaAttention<
-            GEMMDispatchPolicy,
-            TileShape,
-            ElementInputQ,
-            cutlass::gemm::TagToStrideA_t<LayoutQ>,
-            ElementInputKV,
-            cutlass::gemm::TagToStrideB_t<LayoutK>,
-            ElementInputKV,
-            cutlass::gemm::TagToStrideB_t<LayoutV>,
-            TiledMma,
-            GmemTiledCopyQ,  // Q
-            GmemTiledCopyK,  // K
-            GmemTiledCopyV,  // V,
-            false
-    >;
-
-    using GemmKernel = cutlass::gemm::kernel::GemmUniversalAttention<
-    Shape<int, int, int, int>,
-    CollectiveMainloop,
-    CollectiveEpilogue
-    >;
-
-    ExampleRunner<GemmKernel> runner;
-
-    runner.run(options, hw_info);
-  }
-
-  return 0;
+    return 0;
 }
+};

@@ -28,11 +28,20 @@
 
 
 cutlass_example_add_executable(
-  pvc_flash_attention_64
-  pvc_flash_attn_64.cpp
+  pvc_flash_attention_64_causal
+  pvc_flash_attn_64_causal.cpp
 )
 cutlass_example_add_executable(
-  pvc_flash_attention_128
-  pvc_flash_attn_128.cpp
+  pvc_flash_attention_64_non-causal
+  pvc_flash_attn_64_non-causal.cpp
+)
+
+cutlass_example_add_executable(
+  pvc_flash_attention_128_causal
+  pvc_flash_attn_128_causal.cpp
+)
+cutlass_example_add_executable(
+  pvc_flash_attention_128_non-causal
+  pvc_flash_attn_128_non-causal.cpp
 )
 
