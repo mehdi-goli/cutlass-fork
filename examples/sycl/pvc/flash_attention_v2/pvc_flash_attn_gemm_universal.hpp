@@ -125,24 +125,24 @@ public:
   static constexpr bool CausalMask = CollectiveMainloop::CausalMask;
   static constexpr int SubgroupSize = CollectiveMainloop::SubgroupSize; // sub_group size
   static constexpr uint32_t MaxThreadsPerBlock = CollectiveMainloop::MaxThreadsPerBlock;
-  using MmaAtomShape = typename CollectiveMainloop::MmaAtomShape;
-  using SubgroupTileShape = typename CollectiveMainloop::SubgroupTileShape;
+  using MmaAtomShape = typename CollectiveMainloop::MmaAtomShape; //8,16,16
+  using SubgroupTileShape = typename CollectiveMainloop::SubgroupTileShape; //(16,64,64)
 
-  static constexpr int BLK_M = CollectiveMainloop::BLK_M;
-  static constexpr int BLK_N = CollectiveMainloop::BLK_N;
-  static constexpr int BLK_K = CollectiveMainloop::BLK_K;
+  static constexpr int BLK_M = CollectiveMainloop::BLK_M; //128
+  static constexpr int BLK_N = CollectiveMainloop::BLK_N;  //64
+  static constexpr int BLK_K = CollectiveMainloop::BLK_K; //64
 
-  static constexpr int ATOM_M = CollectiveMainloop::ATOM_M;
-  static constexpr int ATOM_N = CollectiveMainloop::ATOM_N;
-  static constexpr int ATOM_K = CollectiveMainloop::ATOM_K;
+  static constexpr int ATOM_M = CollectiveMainloop::ATOM_M; //8
+  static constexpr int ATOM_N = CollectiveMainloop::ATOM_N;  //1
+  static constexpr int ATOM_K = CollectiveMainloop::ATOM_K;  //1
 
-  static constexpr int SG_M = CollectiveMainloop::SG_M;
-  static constexpr int SG_N = CollectiveMainloop::SG_N;
-  static constexpr int SG_K = CollectiveMainloop::SG_K;
+  static constexpr int SG_M = CollectiveMainloop::SG_M;  //16
+  static constexpr int SG_N = CollectiveMainloop::SG_N; //64
+  static constexpr int SG_K = CollectiveMainloop::SG_K;  //64
 
   static constexpr int Vec = (get<0>(MmaAtomShape()) * get<1>(MmaAtomShape())) / SubgroupSize; //8
-  static constexpr int FragsM = get<0>(SubgroupTileShape{}) / get<0>(MmaAtomShape());  // 4
-  static constexpr int FragsN = get<1>(SubgroupTileShape{}) / get<1>(MmaAtomShape());  // 2
+  static constexpr int FragsM = get<0>(SubgroupTileShape{}) / get<0>(MmaAtomShape());  // 2  
+  static constexpr int FragsN = get<1>(SubgroupTileShape{}) / get<1>(MmaAtomShape());  // 4
 
   // Kernel level shared memory storage
   struct SharedStorage {
@@ -270,19 +270,19 @@ public:
     auto residue_mnk = make_tuple(m_max_coord, n_max_coord, k_residue);
 
     static constexpr size_t cacheline_bytes = 64;
-    static constexpr auto block_size_w_a = cute::min(SG_K, cacheline_bytes / sizeof(ElementQ)); //32
-    static constexpr auto block_size_w_b = cute::min(SG_N, cacheline_bytes / sizeof(ElementK)); //32
-    static constexpr auto nums_block_w_a = ceil_div(SG_K, block_size_w_a); // 1
-    static constexpr auto nums_block_w_b = ceil_div(SG_N, block_size_w_b); // 1
+    static constexpr auto block_size_w_a = cute::min(SG_K, cacheline_bytes / sizeof(ElementQ)); //min(64,32)-> 32
+    static constexpr auto block_size_w_b = cute::min(SG_N, cacheline_bytes / sizeof(ElementK)); //min(64, 32) ->32
+    static constexpr auto nums_block_w_a = ceil_div(SG_K, block_size_w_a); // 2
+    static constexpr auto nums_block_w_b = ceil_div(SG_N, block_size_w_b); // 2
     using PrefetchQThrShape =
-        Shape<Int<ATOM_N /cute::gcd(ATOM_N, nums_block_w_a)>, Int<cute::gcd(ATOM_N, nums_block_w_a)>>; //shape<2,1>
+        Shape<Int<ATOM_N /cute::gcd(ATOM_N, nums_block_w_a)>, Int<cute::gcd(ATOM_N, nums_block_w_a)>>; //shape<1,1>
     using PrefetchKThrShape =
-        Shape<Int<ATOM_M /cute::gcd(ATOM_M, nums_block_w_b)>, Int<cute::gcd(ATOM_M, nums_block_w_b)>>; //shape <4,1>
+        Shape<Int<ATOM_M /cute::gcd(ATOM_M, nums_block_w_b)>, Int<cute::gcd(ATOM_M, nums_block_w_b)>>; //shape <4,2>
     using PrefetchVThrShape =
-        Shape<Int<ATOM_M /cute::gcd(ATOM_M, nums_block_w_b)>, Int<cute::gcd(ATOM_M, nums_block_w_b)>>; //shape <4,1>
-    using PrefetchQTileSize = decltype(ceil_div(Shape<Int<SG_M>, Int<SG_K>>{},PrefetchQThrShape{})); //16x32
-    using PrefetchKTileSize = decltype(ceil_div(Shape<Int<SG_K>, Int<SG_N>>{},PrefetchKThrShape{})); //8x32
-    using PrefetchVTileSize = decltype(ceil_div(Shape<Int<SG_K>, Int<SG_N>>{},PrefetchVThrShape{})); // 8x32
+        Shape<Int<ATOM_M /cute::gcd(ATOM_M, nums_block_w_b)>, Int<cute::gcd(ATOM_M, nums_block_w_b)>>; //shape <4,2>
+    using PrefetchQTileSize = decltype(ceil_div(Shape<Int<SG_M>, Int<SG_K>>{},PrefetchQThrShape{})); //16x64
+    using PrefetchKTileSize = decltype(ceil_div(Shape<Int<SG_K>, Int<SG_N>>{},PrefetchKThrShape{})); //16x32
+    using PrefetchVTileSize = decltype(ceil_div(Shape<Int<SG_K>, Int<SG_N>>{},PrefetchVThrShape{})); //16x32
 
     const int causal_seq_len = seq_coord + get<0>(subgroup_shape);
     const int non_causal_seq_len = seq_len;
@@ -291,41 +291,38 @@ public:
                                 : cute::ceil_div(non_causal_seq_len, get<1>(subgroup_shape));
 
     const int item_id = thread_idx % SubgroupSize;
-    const int k_tile_count= head_size / get<1>(subgroup_shape); 
+    const int k_tile_count= head_size /  cute::min(get<1>(subgroup_shape), block_size_w_a); 
     //m, k
     Tensor prefetch_iter_2d_q = params.mainloop.gmem_prefetch_q.get_pvc_tensor(
-      // subgroup arranged 8x1 to load 128x32 in one load (each 16X32)
+      // subgroup arranged 8x1 to load 128x64 in 2 load load (each 16X32)
       make_coord(BlockIdxY() * BLK_M + (sub_group_id * get<0>(PrefetchQTileSize{})),   // iteration 0/M/Hight/vertical
                 0, // Iteration 1/K/Width/Horisontal
                 blk_l_coord),
             make_shape(_1{}, _1{}, _1{}));
-    Tensor prefetch_iter_q = append_pvc_tensor<1>(prefetch_iter_2d_q, k_tile_count, BLK_K);
+    Tensor prefetch_iter_q = append_pvc_tensor<1>(prefetch_iter_2d_q, k_tile_count, cute::min(get<1>(subgroup_shape), block_size_w_a));
     // The Key point is 1 is horisontal and zero is vertical
     // the iteration over K dimention of B matrix (head_size) should be :
     auto iter_over_head_count = head_size / BLK_N;
-    // subgroup arranged 8x1 to load (64x32) in one load(each 8x32)
+    // subgroup arranged 4x2 to load (64x64) in one load(each 16x32)
     // Assume LD_T/LD_N will indicate ColumnMajor and RowMajor
     auto k_prefetch_coordinate =
-        CollectiveMainloop::is_k_transposed ? make_coord((sub_group_id % ATOM_M) * get<0>(PrefetchKTileSize{}), // iteration 0/N/Hight/vertical
-                                                         (sub_group_id / ATOM_M) * get<1>(PrefetchKTileSize{}), //  iteration 1/K//Horisontal
-                                                         blk_l_coord)
-                                            : make_coord(sub_group_id * get<0>(PrefetchKTileSize{}), // iteration 0/K/Hight/vertical
-                                                         0,                                          //  iteration 1/N/W/Horisontal
+       make_coord((sub_group_id % get<0>(PrefetchKThrShape{})) * get<0>(PrefetchKTileSize{}), // iteration 0/N/Hight/vertical
+                                                         (sub_group_id / get<0>(PrefetchKThrShape{})) * get<1>(PrefetchKTileSize{}), //  iteration 1/K//Horisontal
                                                          blk_l_coord);
-      // To load the 64x32
+      // To load the 64x64
       Tensor prefetch_iter_k_base = params.mainloop.gmem_prefetch_k.get_pvc_tensor(k_prefetch_coordinate, make_shape(_1{}, _1{}, _1{}));
       // Adding iterator for the dimention N(sequence length) along 0 /Vertical
-      Tensor prefetch_iter_ndim = append_pvc_tensor< CollectiveMainloop::is_k_transposed? 0 : 1>(prefetch_iter_k_base, nblock_limit, SG_N);
+      Tensor prefetch_iter_ndim = append_pvc_tensor<0>(prefetch_iter_k_base, nblock_limit, SG_N);
       // Adding iterator for  the dimension K (head size) along /Horizontal
-      Tensor prefetch_iter_k = append_pvc_tensor< CollectiveMainloop::is_k_transposed ? 1 : 0>(prefetch_iter_ndim, iter_over_head_count, BLK_N);
+      Tensor prefetch_iter_k = append_pvc_tensor<1>(prefetch_iter_ndim, iter_over_head_count, BLK_N);
 
     // V is a transposed matrix, So here the Sequense length is consumed, it is transposed so the consumed dimension looks like B matrix
     // Hence, the Head size is the fast moving dimention and horisontal and sequence length is vertical.
     // The prefetch only move along the sequence lenth. Here we call sequence length K since it get consumed and head size N since it stay
-    // subgroup arranged 4x2 to load (32x64) in one load(each 8x32)
+    // subgroup arranged 4x2 to load (64x64) in one load(each 64x32)
     Tensor prefetch_iter_2d_v = params.mainloop.gmem_prefetch_v.get_pvc_tensor(
-         make_coord((sub_group_id / ATOM_N) * get<0>(PrefetchVTileSize{}), // iteration 0/K/Hight/vertical/ sequence lengh
-                    head_size_coord,         //  iteration 1/N/W/Horisontal / Head size
+         make_coord((sub_group_id % get<0>(PrefetchVThrShape{})) * get<0>(PrefetchVTileSize{}), // iteration 0/K/Hight/vertical/ sequence lengh
+                    BlockIdxX() * BLK_N + (sub_group_id / get<0>(PrefetchVThrShape{})) * get<1>(PrefetchVTileSize{}),         //  iteration 1/N/W/Horisontal / Head size
                     blk_l_coord),
           // We loop over the consuming dimension which is the iteration 0(N) here 
          make_shape(_1{}, _1{}, _1{}));
@@ -353,7 +350,8 @@ public:
     TiledMma tiled_mma;
     Tensor out_reg = partition_fragment_C(tiled_mma, take<0, 2>(blk_shape));
     // There are 16 workitem and 32 max per subgroup, each worktime containt 2 max and cumulatively, they calculate the max per subgroup  
-    sycl::vec<ElementAccumulator, 2> max_reg{-INFINITY, -INFINITY};
+   // sycl::vec<ElementAccumulator, 2> max_reg{-INFINITY, -INFINITY};
+   ElementAccumulator max_reg{-INFINITY};
     //The sum reg each contains a 2d tesnor for 8 x 4 This is number of sequence lenght process per subgroup
     Tensor sum_reg = make_tensor<ElementAccumulator>(Shape<Int<Vec>, Int<FragsM>>{});
 

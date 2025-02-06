@@ -442,11 +442,11 @@ int main(int argc, const char** argv)
   using ElementOutput = float;                        // <- data type of elements in output matrix D
 
   // Workgroup-level tile
-  using TileShape = Shape<_128, _64, _32>;
+  using TileShape = Shape<_128, _128, _64>;
 
   using TiledMma =
       TiledMMA<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
-               Layout<Shape<_4, _2, _1>, Stride<_2, _1, _0>>,
+               Layout<Shape<_8, _2, _1>, Stride<_2, _1, _0>>,
                Tile<Layout<Shape<_8, _4, _4>, Stride<_1, _32, _8>>,
                     Layout<Shape<_16, _2, _2>, Stride<_1, _32, _16>>, _32>>;
 
@@ -463,9 +463,9 @@ int main(int argc, const char** argv)
           XE_2D_U32x8x16_ST_N>;
 
   if(options.is_causal) {
-    using GmemTiledCopyQ = XE_2D_U16x32x32_LD_N;
+    using GmemTiledCopyQ = XE_2D_U16x16x32_LD_N;
     using GmemTiledCopyK = XE_2D_U16x16x16_LD_T;
-    using GmemTiledCopyV = XE_2D_U16x16x32_LD_V;
+    using GmemTiledCopyV = XE_2D_U16x32x32_LD_V;
     // Mainloop
     using CollectiveMainloop = cutlass::gemm::collective::CollectiveMmaAttention<
             GEMMDispatchPolicy,
@@ -493,9 +493,9 @@ int main(int argc, const char** argv)
 
     runner.run(options, hw_info);
   } else {
-    using GmemTiledCopyQ = XE_2D_U16x32x32_LD_N;
+    using GmemTiledCopyQ = XE_2D_U16x16x32_LD_N;
     using GmemTiledCopyK = XE_2D_U16x16x16_LD_T;
-    using GmemTiledCopyV = XE_2D_U16x16x32_LD_V;
+    using GmemTiledCopyV = XE_2D_U16x32x32_LD_V;
     // Mainloop
     using CollectiveMainloop = cutlass::gemm::collective::CollectiveMmaAttention<
             GEMMDispatchPolicy,

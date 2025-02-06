@@ -227,21 +227,19 @@ public:
     CUTLASS_PRAGMA_UNROLL
     for (int y = 0; y < FragsM; y++) {
       CUTLASS_PRAGMA_UNROLL
-      for (int x = 0; x < Vec; x += 2) {
+      for (int x = 0; x < Vec; x++) {
         int indx = y * Vec + x;
-        sycl::vec<ElementLSE, 2> cur_sum {sub_group_reduce_add(sum(indx)), 
-                                              sub_group_reduce_add(sum(indx +1)) }; 
-        sycl::vec<ElementO, 2> cur_scale {(cur_sum[0] == 0.f || cur_sum[0] != cur_sum[0]) ? 1.f : sycl::native::recip(cur_sum[0]),
-                                      (cur_sum[1] == 0.f || cur_sum[1] != cur_sum[1]) ? 1.f : sycl::native::recip(cur_sum[1])};
-        sycl::vec<ElementLSE,2> curr_scale_bcast = group_broadcast(g, max, (indx/2) % 16);
+        ElementLSE cur_sum {sub_group_reduce_add(sum(indx))
+                                              }; 
+        ElementO cur_scale {(cur_sum == 0.f || cur_sum != cur_sum) ? 1.f : sycl::native::recip(cur_sum)
+                                      };
+        ElementLSE curr_scale_bcast = group_broadcast(g, max, (indx) % 16);
         // Tensor tLSEr = from now on sum can be reused for;
-        sum(indx) = cur_sum[0] == 0.f ? -INFINITY : curr_scale_bcast[0] * softmax_scale + sycl::native::log(cur_sum[0]);
-        sum(indx + 1) = cur_sum[1] == 0.f ? -INFINITY : curr_scale_bcast[1] * softmax_scale + sycl::native::log(cur_sum[1]);
+        sum(indx) = cur_sum == 0.f ? -INFINITY : curr_scale_bcast * softmax_scale + sycl::native::log(cur_sum);
 
         CUTLASS_PRAGMA_UNROLL
         for (int z = 0; z < FragsN; z++) {
-          out(x, y, z) *= cur_scale[0];
-          out(x + 1, y, z) *= cur_scale[1];
+          out(x, y, z) *= cur_scale;
         }
       }
     }

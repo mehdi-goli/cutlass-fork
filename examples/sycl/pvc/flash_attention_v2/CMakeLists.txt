@@ -28,11 +28,11 @@
 
 
 cutlass_example_add_executable(
-  pvc_flash_attention
-  pvc_flash_attn.cpp
+  pvc_flash_attention_64
+  pvc_flash_attn_64.cpp
+)
+cutlass_example_add_executable(
+  pvc_flash_attention_128
+  pvc_flash_attn_128.cpp
 )
 
-cutlass_example_add_executable(
-  pvc_flash_attention_transposed_k
-  pvc_flash_attn_transposed_k.cpp
-)

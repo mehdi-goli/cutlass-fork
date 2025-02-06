@@ -120,13 +120,13 @@ struct CollectiveMmaAttention<
   static constexpr auto BLK_N = get<1>(WorkgroupTileShape{});// 64
   static constexpr auto BLK_K = get<2>(WorkgroupTileShape{});// 32
   
-  static constexpr auto ATOM_M = get<1>(typename TiledMma::ThrLayoutVMNK{}.shape()); //4
-  static constexpr auto ATOM_N = get<2>(typename TiledMma::ThrLayoutVMNK{}.shape()); //2 
+  static constexpr auto ATOM_M = get<1>(typename TiledMma::ThrLayoutVMNK{}.shape()); //8
+  static constexpr auto ATOM_N = get<2>(typename TiledMma::ThrLayoutVMNK{}.shape()); //1 
   static constexpr auto ATOM_K = get<3>(typename TiledMma::ThrLayoutVMNK{}.shape()); //1
 
-  static constexpr auto SG_M = ceil_div(BLK_M, ATOM_M); //32
-  static constexpr auto SG_N = ceil_div(BLK_N, ATOM_N); //32
-  static constexpr auto SG_K = ceil_div(BLK_K, ATOM_K); //32
+  static constexpr auto SG_M = ceil_div(BLK_M, ATOM_M);   //16
+  static constexpr auto SG_N = ceil_div(BLK_N, ATOM_N);   //64
+  static constexpr auto SG_K = ceil_div(BLK_K, ATOM_K);   // 64
   using SubgroupTileShape = Shape<decltype(SG_M), decltype(SG_N), decltype(SG_K)>;
 
   static constexpr size_t cacheline_bytes = 64;
@@ -140,7 +140,6 @@ struct CollectiveMmaAttention<
   using PrefetchQTileSize = decltype(ceil_div(Shape<Int<SG_M>, Int<SG_K>>{},PrefetchQThrShape{})); //16x32
   using PrefetchKTileSize = decltype(ceil_div(Shape<Int<SG_K>, Int<SG_N>>{},PrefetchKThrShape{})); //8x32
   using PrefetchVTileSize = decltype(ceil_div(Shape<Int<SG_K>, Int<SG_N>>{},PrefetchVThrShape{})); // 8x32
-  static constexpr bool is_k_transposed = cute::detail::is_transpose_load<GmemTiledCopyK_>;
   static constexpr uint32_t MaxThreadsPerBlock = size(TiledMma{});
   using traits_load_Q = Copy_Traits<GmemTiledCopyQ, StrideQ>;
   using atom_load_Q = Copy_Atom<traits_load_Q, ElementQ>;
@@ -281,7 +280,6 @@ struct CollectiveMmaAttention<
       make_coord(n_coord, 0, l_coord), tCrB_copy_view.shape());
     Tensor iter_b = append_pvc_tensor<1>(iter_2d_b, k_tile_count, BLK_K);
 
-    CUTLASS_PRAGMA_UNROLL
     for (int k_tile = 0; k_tile < k_tile_count; ++k_tile) {
       // Copy gmem to rmem for the first k_tile
       copy(params.gmem_tiled_copy_q, iter_a(_,_,_,k_tile), tCrA_copy_view);
