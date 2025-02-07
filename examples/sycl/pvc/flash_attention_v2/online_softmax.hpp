@@ -37,22 +37,6 @@
 #include <sycl/sycl.hpp>
 #include "cutlass/cutlass.h"
 
-#ifdef __SYCL_DEVICE_ONLY__
-#define SYCL_DEVICE_OCL_FMA(x, y) SYCL_EXTERNAL x
-#else
-#define SYCL_DEVICE_OCL_FMA(x, y) \
-  inline x                        \
-  {                               \
-    assert(false);                \
-    return (y)0;                  \
-  }
-#endif
-
-// TODO:: Temporary using OpenCL function as sycl_reduce_over_group spills on sycl::maximum<>() operation
-SYCL_DEVICE_OCL_FMA(float sub_group_reduce_add(float i), float);
-SYCL_DEVICE_OCL_FMA(float sub_group_reduce_max(float i), float);
-
-#undef SYCL_DEVICE_OCL_FMA
 
 namespace flash
 {
@@ -88,12 +72,12 @@ namespace flash
       auto g = syclcompat::get_nd_item<1>().get_sub_group();
       const auto max_scale =  max * params.scale;
       CUTLASS_PRAGMA_UNROLL
-      for (int indx = 0; indx < Vec*FragsM; indx++)
+      for (int indx = 0; indx < Vec * FragsM; indx++)
       { 
-        const auto max_scale_bcast =(group_broadcast(g, max_scale, (indx ) % 16));
+        const auto max_scale_bcast =(group_broadcast(g, max_scale, indx));
         CUTLASS_PRAGMA_UNROLL 
         for (int z = 0; z < FragsN; z++)
-        {         
+        {
           auto base_indx = indx + (z * Vec * FragsM);
           Element eq = {frag_s(base_indx) - max_scale_bcast};
           frag_s(base_indx) = sycl::native::exp2(eq);
@@ -114,7 +98,7 @@ namespace flash
       CUTLASS_PRAGMA_UNROLL
       for (int indx = 0; indx < Vec*FragsM; indx++)
       {
-        auto maxptr = group_broadcast(g, max, indx % 16);
+        auto maxptr = group_broadcast(g, max, indx);
         CUTLASS_PRAGMA_UNROLL
         for (int z = 0; z < FragsN; z++)
         { 
@@ -122,7 +106,7 @@ namespace flash
           maxptr = sycl::max(maxptr, src(base_indx));
           src(base_indx) *= params.scale;
         }
-        maxptr = {sub_group_reduce_max(maxptr)};
+        maxptr = {reduce_over_group(g, maxptr, sycl::maximum<>())};
         if (indx == g.get_local_id()[0]) {
           max = maxptr;
         }
@@ -147,10 +131,10 @@ namespace flash
         Element max_scale{max * params.scale};
         Element exp_scale{sycl::native::exp2(max_prev * params.scale - max_scale)};
         CUTLASS_PRAGMA_UNROLL
-        for (int indx =0; indx < Vec*FragsM; indx++)
+        for (int indx =0; indx < Vec * FragsM; indx++)
         {
-          auto max_scale_bcast = group_broadcast(g, max_scale, (indx) % 16);
-          auto exp_scale_bcast = group_broadcast(g, exp_scale, (indx) % 16);
+          auto max_scale_bcast = group_broadcast(g, max_scale, indx);
+          auto exp_scale_bcast = group_broadcast(g, exp_scale, indx);
           sum(indx) *= exp_scale_bcast;
           CUTLASS_PRAGMA_UNROLL
           for (int z = 0; z < FragsN; z++)

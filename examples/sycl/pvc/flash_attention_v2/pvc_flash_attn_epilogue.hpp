@@ -42,7 +42,6 @@
 #include "cutlass/epilogue/fusion/callbacks.hpp"
 #include "cutlass/epilogue/fusion/sm90_visitor_tma_warpspecialized.hpp"
 #include "cutlass/detail/layout.hpp"
-#include "online_softmax.hpp"
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -202,7 +201,6 @@ public:
     static constexpr auto BLK_M = get<0>(CtaTileMNK{});
     static constexpr auto BLK_N = get<1>(CtaTileMNK{});
     static constexpr auto BLK_K = get<2>(CtaTileMNK{});
-    // static_assert(is_same_v<typename TiledMma::ThrLayoutVMNK, int>, "assertation fail");
     static constexpr auto ATOM_M = get<1>(typename TiledMma::ThrLayoutVMNK{}.shape());
     static constexpr auto ATOM_N = get<2>(typename TiledMma::ThrLayoutVMNK{}.shape());
     static constexpr auto ATOM_K = get<3>(typename TiledMma::ThrLayoutVMNK{}.shape());
@@ -229,11 +227,9 @@ public:
       CUTLASS_PRAGMA_UNROLL
       for (int x = 0; x < Vec; x++) {
         int indx = y * Vec + x;
-        ElementLSE cur_sum {sub_group_reduce_add(sum(indx))
-                                              }; 
-        ElementO cur_scale {(cur_sum == 0.f || cur_sum != cur_sum) ? 1.f : sycl::native::recip(cur_sum)
-                                      };
-        ElementLSE curr_scale_bcast = group_broadcast(g, max, (indx) % 16);
+        ElementLSE cur_sum = reduce_over_group(g, sum(indx), sycl::plus<>()); 
+        ElementO cur_scale = (cur_sum == 0.f || cur_sum != cur_sum) ? 1.f : sycl::native::recip(cur_sum);
+        ElementLSE curr_scale_bcast = group_broadcast(g, max, indx);
         // Tensor tLSEr = from now on sum can be reused for;
         sum(indx) = cur_sum == 0.f ? -INFINITY : curr_scale_bcast * softmax_scale + sycl::native::log(cur_sum);
 
@@ -257,8 +253,7 @@ public:
 
     auto lse_ptr = params.ptr_LSE + lse_offset;
 
-    auto sg = syclcompat::get_nd_item<1>().get_sub_group();
-    const int lane_id = static_cast<int>(sg.get_local_linear_id());
+    const int lane_id = static_cast<int>(g.get_local_id()[0]);
 
     // use the entire sub_group to write lse since all
     // work items within subgroup have the same sum() data stored

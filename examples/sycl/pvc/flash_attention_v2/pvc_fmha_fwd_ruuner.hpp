@@ -53,18 +53,18 @@ using namespace cute;
 // Command line options parsing
 struct Options {
 
-  bool help;
+   bool help;
   bool error;
   bool is_causal;
 
   int batch, num_heads, seq_len, head_size, iterations;
   float softmax_scale;
 
-  Options(bool causal, int head_dim):
+  Options():
     help(false),
     error(false),
-    is_causal(causal),
-    batch(32), num_heads(16), seq_len(512), head_size(head_dim), iterations(100),
+    is_causal(false),
+    batch(32), num_heads(16), seq_len(512), head_size(128), iterations(100),
     softmax_scale(1.f)
   { }
 
@@ -77,9 +77,14 @@ struct Options {
       return;
     }
 
+    if (cmd.check_cmd_line_flag("is_causal")) {
+      is_causal = true;
+    }
+
     cmd.get_cmd_line_argument("batch", batch, 32);
     cmd.get_cmd_line_argument("num_heads", num_heads, 16);
     cmd.get_cmd_line_argument("seq_len", seq_len, 512);
+    cmd.get_cmd_line_argument("head_size", head_size, 128);
     cmd.get_cmd_line_argument("iterations", iterations, 100);
 
     softmax_scale = 1 / sqrt(static_cast<float>(head_size));
@@ -91,9 +96,11 @@ struct Options {
     out << "PVC Flash Attention v2 Example\n\n"
       << "Options:\n\n"
       << "  --help                      If specified, displays this usage statement\n\n"
+      << "  --is_causal                 Apply Causal Mask to the output of first Matmul\n"
       << "  --batch=<int>               Sets the Batch Size of the Multi-Head Self Attention module\n"
       << "  --num_heads=<int>           Sets the Number of Attention Heads of the Multi-Head Self Attention module\n"
       << "  --seq_len=<int>             Sets the Sequence length of the Multi-Head Self Attention module\n"
+      << "  --head_size=<int>           Sets the Attention Head dimension of the Multi-Head Self Attention module\n"
       << "  --iterations=<int>          Iterations\n\n";
 
     return out;
@@ -394,27 +401,8 @@ struct ExampleRunner {
 
 };
 
-template<bool Casual, int Head_Dim, typename TileShape, typename SubgroupShape> struct FMHAConfig {
-static int  run(int argc, const char** argv) {
-
-  
-  //
-  // Parse options
-  //
-
-  Options options(Casual, Head_Dim);
-
-  options.parse(argc, argv);
-
-  if (options.help) {
-    options.print_usage(std::cout) << std::endl;
-    return 0;
-  }
-
-  if (options.error) {
-    std::cerr << "Aborting execution." << std::endl;
-    return -1;
-  }
+template<bool Casual, typename TileShape, typename SubgroupShape> struct FMHAConfig {
+static int  run(const Options& options) {
 
   //
   // Run examples
