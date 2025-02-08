@@ -130,16 +130,20 @@ struct CollectiveMmaAttention<
   using SubgroupTileShape = Shape<decltype(SG_M), decltype(SG_N), decltype(SG_K)>;
 
   static constexpr size_t cacheline_bytes = 64;
-  static constexpr auto block_size_w_a = cute::min(SG_K, cacheline_bytes / sizeof(ElementQ)); //32
-  static constexpr auto block_size_w_b = cute::min(SG_N, cacheline_bytes / sizeof(ElementK)); //32
-  static constexpr auto nums_block_w_a = ceil_div(SG_K, block_size_w_a); // 1
-  static constexpr auto nums_block_w_b = ceil_div(SG_N, block_size_w_b); // 1
-  using PrefetchQThrShape = Shape<Int<ATOM_N /cute::gcd(ATOM_N, nums_block_w_a)>, Int<cute::gcd(ATOM_N, nums_block_w_a)>>; //shape<2,1>
-  using PrefetchKThrShape = Shape<Int<ATOM_M /cute::gcd(ATOM_M, nums_block_w_b)>, Int<cute::gcd(ATOM_M, nums_block_w_b)>>; //shape <4,1>
-  using PrefetchVThrShape = Shape<Int<ATOM_M /cute::gcd(ATOM_M, nums_block_w_b)>, Int<cute::gcd(ATOM_M, nums_block_w_b)>>; //shape <4,1>
-  using PrefetchQTileSize = decltype(ceil_div(Shape<Int<SG_M>, Int<SG_K>>{},PrefetchQThrShape{})); //16x32
-  using PrefetchKTileSize = decltype(ceil_div(Shape<Int<SG_K>, Int<SG_N>>{},PrefetchKThrShape{})); //8x32
-  using PrefetchVTileSize = decltype(ceil_div(Shape<Int<SG_K>, Int<SG_N>>{},PrefetchVThrShape{})); // 8x32
+  static constexpr auto block_size_w_a = cute::min(BLK_K, cacheline_bytes / sizeof(ElementQ)); //min(64,32)-> 32
+  static constexpr auto block_size_w_b = cute::min(BLK_N, cacheline_bytes / sizeof(ElementK)); // min(64, 32) ->32
+  static constexpr auto nums_block_w_a = ceil_div(BLK_K, block_size_w_a);                      // 2
+  static constexpr auto nums_block_w_b = ceil_div(BLK_N, block_size_w_b); // 2
+  static constexpr auto Total_SG = ATOM_N*ATOM_M*ATOM_K;
+  using PrefetchQThrShape =
+      Shape<Int<Total_SG / cute::gcd(Total_SG, nums_block_w_a)>, Int<cute::gcd(Total_SG, nums_block_w_a)>>; // shape<4,2>  //(8,2)
+  using PrefetchKThrShape =
+      Shape<Int<Total_SG / cute::gcd(Total_SG, nums_block_w_b)>, Int<cute::gcd(Total_SG, nums_block_w_b)>>; // shape <4,2> //(4,4)
+  using PrefetchVThrShape =
+      Shape<Int<Total_SG / cute::gcd(Total_SG, nums_block_w_b)>, Int<cute::gcd(Total_SG, nums_block_w_b)>>; // shape <4,2>  // (4,4)
+  using PrefetchQTileSize = decltype(ceil_div(Shape<Int<BLK_M>, Int<BLK_K>>{},PrefetchQThrShape{})); //32x32   // 16x32
+  using PrefetchKTileSize = decltype(ceil_div(Shape<Int<BLK_K>, Int<BLK_N>>{},PrefetchKThrShape{})); //16x32   // 16x32
+  using PrefetchVTileSize = decltype(ceil_div(Shape<Int<BLK_K>, Int<BLK_N>>{},PrefetchVThrShape{})); //16x32   // 16x32
   static constexpr uint32_t MaxThreadsPerBlock = size(TiledMma{});
   using traits_load_Q = Copy_Traits<GmemTiledCopyQ, StrideQ>;
   using atom_load_Q = Copy_Atom<traits_load_Q, ElementQ>;

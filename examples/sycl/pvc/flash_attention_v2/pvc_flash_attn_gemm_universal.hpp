@@ -269,21 +269,12 @@ public:
     auto k_residue   = head_size - get<2>(subgroup_shape) * (head_size / get<2>(subgroup_shape));  // K - SUB_K * k_coord_max
     auto residue_mnk = make_tuple(m_max_coord, n_max_coord, k_residue);
 
-    static constexpr size_t cacheline_bytes = 64;
-    static constexpr auto block_size_w_a = cute::min(BLK_K, cacheline_bytes / sizeof(ElementQ)); //min(64,32)-> 32
-    static constexpr auto block_size_w_b = cute::min(BLK_N, cacheline_bytes / sizeof(ElementK)); // min(64, 32) ->32
-    static constexpr auto nums_block_w_a = ceil_div(BLK_K, block_size_w_a);                      // 2
-    static constexpr auto nums_block_w_b = ceil_div(BLK_N, block_size_w_b); // 2
-  
-    using PrefetchQThrShape =
-        Shape<Int< ATOM_N*ATOM_M*ATOM_K / cute::gcd( ATOM_N*ATOM_M*ATOM_K, nums_block_w_a)>, Int<cute::gcd( ATOM_N*ATOM_M*ATOM_K, nums_block_w_a)>>; // shape<4,2>  //(8,2)
-    using PrefetchKThrShape =
-        Shape<Int< ATOM_N*ATOM_M*ATOM_K / cute::gcd( ATOM_N*ATOM_M*ATOM_K, nums_block_w_b)>, Int<cute::gcd( ATOM_N*ATOM_M*ATOM_K, nums_block_w_b)>>; // shape <4,2> //(4,4)
-    using PrefetchVThrShape =
-        Shape<Int< ATOM_N*ATOM_M*ATOM_K / cute::gcd( ATOM_N*ATOM_M*ATOM_K, nums_block_w_b)>, Int<cute::gcd( ATOM_N*ATOM_M*ATOM_K, nums_block_w_b)>>; // shape <4,2>  // (4,4)
-    using PrefetchQTileSize = decltype(ceil_div(Shape<Int<BLK_M>, Int<BLK_K>>{},PrefetchQThrShape{})); //32x32   // 16x32
-    using PrefetchKTileSize = decltype(ceil_div(Shape<Int<BLK_K>, Int<BLK_N>>{},PrefetchKThrShape{})); //16x32   // 16x32
-    using PrefetchVTileSize = decltype(ceil_div(Shape<Int<BLK_K>, Int<BLK_N>>{},PrefetchVThrShape{})); //16x32   // 16x32
+    using PrefetchQThrShape = typename CollectiveMainloop::PrefetchQThrShape; // shape<4,2>  //(8,2)
+    using PrefetchKThrShape = typename CollectiveMainloop::PrefetchKThrShape; // shape <4,2> //(4,4)
+    using PrefetchVThrShape = typename CollectiveMainloop::PrefetchVThrShape; // shape <4,2>  // (4,4)
+    using PrefetchQTileSize = typename CollectiveMainloop::PrefetchQTileSize; //32x32   // 16x32
+    using PrefetchKTileSize = typename CollectiveMainloop::PrefetchKTileSize; //16x32   // 16x32
+    using PrefetchVTileSize = typename CollectiveMainloop::PrefetchVTileSize; //16x32   // 16x32
 
     const int causal_seq_len = seq_coord + get<0>(subgroup_shape);
     const int non_causal_seq_len = seq_len;
@@ -350,7 +341,6 @@ public:
     TiledMma tiled_mma;
     Tensor out_reg = partition_fragment_C(tiled_mma, take<0, 2>(blk_shape));
     // There are 16 workitem and 32 max per subgroup, each worktime containt 2 max and cumulatively, they calculate the max per subgroup  
-   // sycl::vec<ElementAccumulator, 2> max_reg{-INFINITY, -INFINITY};
    ElementAccumulator max_reg{-INFINITY};
     //The sum reg each contains a 2d tesnor for 8 x 4 This is number of sequence lenght process per subgroup
     Tensor sum_reg = make_tensor<ElementAccumulator>(Shape<Int<Vec>, Int<FragsM>>{});
