@@ -58,7 +58,7 @@ template <typename Element> struct Softmax {
     const auto max_scale = max * params.scale;
     CUTLASS_PRAGMA_UNROLL
     for (int indx = 0; indx < Vec * FragsM; indx++) {
-      const auto max_scale_bcast = (group_broadcast(g, max_scale, indx));
+      const auto max_scale_bcast = group_broadcast(g, max_scale, indx);
       CUTLASS_PRAGMA_UNROLL
       for (int z = 0; z < FragsN; z++) {
         auto base_indx = indx + (z * Vec * FragsM);
