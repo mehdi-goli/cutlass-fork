@@ -188,7 +188,6 @@ public:
         int indx = y * Vec + x;
         auto cur_sum = reduce_over_group(g, sum(indx), sycl::plus<>());
         auto cur_scale = (cur_sum == 0.f || cur_sum != cur_sum) ? 1.f : sycl::native::recip(cur_sum);
-        auto curr_scale_bcast = group_broadcast(g, max, indx);
         CUTLASS_PRAGMA_UNROLL
         for (int z = 0; z < FragsN; z++) {
           out(x, y, z) *= cur_scale;
