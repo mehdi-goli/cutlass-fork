@@ -53,7 +53,7 @@ int main(int argc, const char **argv) {
   if (options.head_size == 64) {
 
     using TiledMma = TiledMMA<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>, Layout<Shape<_8, _1, _1>, Stride<_1, _1, _1>>,
-                              // Atom, Harware(NUMBER OF CONCURRENT MMA), Iteration
+                              // Atom, Hardware(NUMBER OF CONCURRENT MMA), Iteration
                               Tile<Layout<Shape<_8, _8, _2>, Stride<_1, _16, _8>>,   // Vec Iteration, Hardware Jump,
                                                                                      // Iteration Jump for both M and N
                                    Layout<Shape<_16, _1, _4>, Stride<_1, _64, _16>>, // Vec Iteration, Hardware Jump,
