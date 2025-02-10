@@ -281,7 +281,7 @@ public:
     // Assume LD_T/LD_N will indicate ColumnMajor and RowMajor
     auto k_prefetch_coordinate = make_coord(
         (sub_group_id / get<1>(PrefetchKThrShape{})) * get<0>(PrefetchKTileSize{}), // iteration 0/N/Hight/vertical
-        (sub_group_id % get<1>(PrefetchKThrShape{})) * get<1>(PrefetchKTileSize{}), //  iteration 1/K//Horisontal
+        (sub_group_id % get<1>(PrefetchKThrShape{})) * get<1>(PrefetchKTileSize{}), // iteration 1/K//Horizontal
         blk_l_coord);
     // To load the 64x64
     Tensor prefetch_iter_k_base =
