@@ -106,12 +106,9 @@ struct CollectiveMmaAttention<MainloopIntelPVC<Stages>, TileShape_, ElementQ_, S
                                   Int<cute::gcd(Total_SG, nums_block_w_b)>>; // shape <4,2> //(4,4)
   using PrefetchVThrShape = Shape<Int<Total_SG / cute::gcd(Total_SG, nums_block_w_b)>,
                                   Int<cute::gcd(Total_SG, nums_block_w_b)>>; // shape <4,2>  // (4,4)
-  using PrefetchQTileSize = decltype(ceil_div(Shape<Int<BLK_M>, Int<BLK_K>>{}, PrefetchQThrShape{})); // 32x32   //
-                                                                                                      // 16x32
-  using PrefetchKTileSize = decltype(ceil_div(Shape<Int<BLK_K>, Int<BLK_N>>{}, PrefetchKThrShape{})); // 16x32   //
-                                                                                                      // 16x32
-  using PrefetchVTileSize = decltype(ceil_div(Shape<Int<BLK_K>, Int<BLK_N>>{}, PrefetchVThrShape{})); // 16x32   //
-                                                                                                      // 16x32
+  using PrefetchQTileSize = decltype(ceil_div(Shape<Int<BLK_M>, Int<BLK_K>>{}, PrefetchQThrShape{})); // (32/16)x32
+  using PrefetchKTileSize = decltype(ceil_div(Shape<Int<BLK_K>, Int<BLK_N>>{}, PrefetchKThrShape{})); // 16x32
+  using PrefetchVTileSize = decltype(ceil_div(Shape<Int<BLK_K>, Int<BLK_N>>{}, PrefetchVThrShape{})); // 16x32 
   static constexpr uint32_t MaxThreadsPerBlock = size(TiledMma{});
   using traits_load_Q = Copy_Traits<GmemTiledCopyQ, StrideQ>;
   using atom_load_Q = Copy_Atom<traits_load_Q, ElementQ>;
