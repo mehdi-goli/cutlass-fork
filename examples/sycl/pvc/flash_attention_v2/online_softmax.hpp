@@ -62,7 +62,7 @@ template <typename Element> struct Softmax {
       CUTLASS_PRAGMA_UNROLL
       for (int z = 0; z < FragsN; z++) {
         auto base_indx = indx + (z * Vec * FragsM);
-        Element eq = {frag_s(base_indx) - max_scale_bcast};
+        Element eq = frag_s(base_indx) - max_scale_bcast;
         frag_s(base_indx) = sycl::native::exp2(eq);
         sum(indx) += frag_s(base_indx);
       }
