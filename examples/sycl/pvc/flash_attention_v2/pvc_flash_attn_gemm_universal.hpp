@@ -247,9 +247,9 @@ public:
         head_size - get<2>(subgroup_shape) * (head_size / get<2>(subgroup_shape)); // K - SUB_K * k_coord_max
     auto residue_mnk = make_tuple(m_max_coord, n_max_coord, k_residue);
 
-    using PrefetchQThrShape = typename CollectiveMainloop::PrefetchQThrShape; // shape<4,2>  //(8,2)
-    using PrefetchKThrShape = typename CollectiveMainloop::PrefetchKThrShape; // shape <4,2> //(4,4)
-    using PrefetchVThrShape = typename CollectiveMainloop::PrefetchVThrShape; // shape <4,2>  // (4,4)
+    using PrefetchQThrShape = typename CollectiveMainloop::PrefetchQThrShape; // shape<4,2> // (8,2)
+    using PrefetchKThrShape = typename CollectiveMainloop::PrefetchKThrShape; // shape<4,2> // (4,4)
+    using PrefetchVThrShape = typename CollectiveMainloop::PrefetchVThrShape; // shape<4,2> // (4,4)
     using PrefetchQTileSize = typename CollectiveMainloop::PrefetchQTileSize; // 32x32   // 16x32
     using PrefetchKTileSize = typename CollectiveMainloop::PrefetchKTileSize; // 16x32   // 16x32
     using PrefetchVTileSize = typename CollectiveMainloop::PrefetchVTileSize; // 16x32   // 16x32
