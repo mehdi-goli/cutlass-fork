@@ -293,9 +293,9 @@ public:
     Tensor prefetch_iter_k = append_pvc_tensor<1>(prefetch_iter_ndim, iter_over_head_count,
                                                   (get<1>(PrefetchKThrShape{}) * get<1>(PrefetchKTileSize{})));
 
-    // V is a transposed matrix, So here the Sequense length is consumed, it is transposed so the consumed dimension
-    // looks like B matrix Hence, the Head size is the fast moving dimention and horisontal and sequence length is
-    // vertical. The prefetch only move along the sequence lenth. Here we call sequence length K since it get consumed
+    // V is a transposed matrix, So here the sequence length is consumed, it is transposed so the consumed dimension
+    // looks like B matrix Hence, the Head size is the fast moving dimension and horizontal and sequence length is
+    // vertical. The prefetch only move along the sequence length. Here we call sequence length K since it get consumed
     // and head size N since it stay subgroup arranged 4x2 to load (64x64) in one load(each 64x32)
     Tensor prefetch_iter_2d_v = params.mainloop.gmem_prefetch_v.get_pvc_tensor(
         make_coord((sub_group_id / get<1>(PrefetchVThrShape{})) *
