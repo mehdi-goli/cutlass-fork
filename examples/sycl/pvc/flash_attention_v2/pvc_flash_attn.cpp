@@ -63,7 +63,7 @@ int main(int argc, const char **argv) {
                              : FMHAConfig<false, Shape<_128, _64, _64>, TiledMma>::run(options);
   } else if (options.head_size == 128) {
     using TiledMma = TiledMMA<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>, Layout<Shape<_8, _2, _1>, Stride<_2, _1, _1>>,
-                              // Atom, Harware(NUMBER OF CONCURRENT MMA), Iteration
+                              // Atom, Hardware(NUMBER OF CONCURRENT MMA), Iteration
                               Tile<Layout<Shape<_8, _8, _2>, Stride<_1, _16, _8>>,   // Vec Iteration, Hardware Jump,
                                                                                      // Iteration Jump for both M and N
                                    Layout<Shape<_16, _2, _4>, Stride<_1, _64, _16>>, // Vec Iteration, Hardware Jump,
