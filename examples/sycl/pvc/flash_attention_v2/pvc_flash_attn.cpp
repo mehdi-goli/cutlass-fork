@@ -28,10 +28,10 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  **************************************************************************************************/
-#include "pvc_fmha_fwd_ruuner.hpp"
 
-int main(int argc, const char** argv)
-{
+#include "pvc_flash_attn_ruuner.hpp"
+
+int main(int argc, const char **argv) {
   //
   // Parse options
   //
@@ -50,15 +50,30 @@ int main(int argc, const char** argv)
     return -1;
   }
 
-  if (options.is_causal && options.head_size==64)
-    return FMHAConfig<true, Shape<_128, _64, _64>, Shape<_8, _1, _1>>::run(options);
-  else if (!options.is_causal && options.head_size==64)
-    return FMHAConfig<false, Shape<_128, _64, _64>, Shape<_8, _1, _1>>::run(options);
-  else if (options.is_causal && options.head_size==128)
-    return FMHAConfig<true, Shape<_128, _128, _64>, Shape<_8, _2, _1>>::run(options);
-  else  if (!options.is_causal && options.head_size==128)
-    return FMHAConfig<false, Shape<_128, _128, _64>, Shape<_8, _2, _1>>::run(options);
-  else
+  if (options.head_size == 64) {
+
+    using TiledMma = TiledMMA<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>, Layout<Shape<_8, _1, _1>, Stride<_1, _1, _1>>,
+                              // Atom, Harware(NUMBER OF CONCURRENT MMA), Iteration
+                              Tile<Layout<Shape<_8, _8, _2>, Stride<_1, _16, _8>>,   // Vec Iteration, Hardware Jump,
+                                                                                     // Iteration Jump for both M and N
+                                   Layout<Shape<_16, _1, _4>, Stride<_1, _64, _16>>, // Vec Iteration, Hardware Jump,
+                                                                                     // Iteration Jump for both M and N
+                                   _64>>;                                            // K is going to be 64
+    return options.is_causal ? FMHAConfig<true, Shape<_128, _64, _64>, TiledMma>::run(options)
+                             : FMHAConfig<false, Shape<_128, _64, _64>, TiledMma>::run(options);
+  } else if (options.head_size == 128) {
+    using TiledMma = TiledMMA<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>, Layout<Shape<_8, _2, _1>, Stride<_2, _1, _1>>,
+                              // Atom, Harware(NUMBER OF CONCURRENT MMA), Iteration
+                              Tile<Layout<Shape<_8, _8, _2>, Stride<_1, _16, _8>>,   // Vec Iteration, Hardware Jump,
+                                                                                     // Iteration Jump for both M and N
+                                   Layout<Shape<_16, _2, _4>, Stride<_1, _64, _16>>, // Vec Iteration, Hardware Jump,
+                                                                                     // Iteration Jump for both M and N
+                                   _64>>;                                            // K
+
+    return options.is_causal ? FMHAConfig<true, Shape<_128, _128, _64>, TiledMma>::run(options)
+                             : FMHAConfig<false, Shape<_128, _128, _64>, TiledMma>::run(options);
+  } else {
     std::cerr << "Aborting execution." << std::endl;
-  return -1; 
+    return -1;
+  }
 }

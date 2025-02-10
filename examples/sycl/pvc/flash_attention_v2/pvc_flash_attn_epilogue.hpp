@@ -51,29 +51,12 @@ namespace collective {
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
-template <
-  class DispatchPolicy,
-  class... Args
->
-class CollectiveEpilogueAttention {
+template <class DispatchPolicy, class... Args> class CollectiveEpilogueAttention {
   static_assert(cutlass::detail::dependent_false<DispatchPolicy>, "Could not find an epilogue specialization.");
 };
 
-template <
-  class CtaTileMNK_,
-  class ElementO_,
-  class StrideO_,
-  class ElementLSE_,
-  class CopyOpO_
->
-class CollectiveEpilogueAttention<
-  IntelPVCEpilogue,
-  CtaTileMNK_,
-  ElementO_,
-  StrideO_,
-  ElementLSE_,
-  CopyOpO_
-> {
+template <class CtaTileMNK_, class ElementO_, class StrideO_, class ElementLSE_, class CopyOpO_>
+class CollectiveEpilogueAttention<IntelPVCEpilogue, CtaTileMNK_, ElementO_, StrideO_, ElementLSE_, CopyOpO_> {
 public:
   //
   // Type Aliases
@@ -96,17 +79,18 @@ public:
   static_assert(cute::rank(StrideO{}) == 3, "StrideO must be rank-3: [seq_len, head_size, batch * num_heads]");
 
   using Trait_O = Copy_Traits<GmemTiledCopyO>;
-  using XE_Copy_O = decltype(make_xe_2d_copy(Copy_Atom<Copy_Traits<CopyOpO, StrideO>, ElementO>{}.with(
-            make_tensor(make_gmem_ptr(static_cast<ElementO const*>(nullptr)), make_layout(make_shape(0, 0, 0), StrideO{}))),
-                                Layout<Shape<_1, Int<SubgroupSize>>>{}));
+  using XE_Copy_O = decltype(make_xe_2d_copy(
+      Copy_Atom<Copy_Traits<CopyOpO, StrideO>, ElementO>{}.with(make_tensor(
+          make_gmem_ptr(static_cast<ElementO const *>(nullptr)), make_layout(make_shape(0, 0, 0), StrideO{}))),
+      Layout<Shape<_1, Int<SubgroupSize>>>{}));
+
 private:
   constexpr static bool is_destination_supported = not cute::is_void_v<ElementO>;
 
 public:
-
   using EmptyType = cute::tuple<>;
 
-  struct TensorStorageImpl: cute::tuple<EmptyType, EmptyType> {};
+  struct TensorStorageImpl : cute::tuple<EmptyType, EmptyType> {};
 
   struct SharedStorage {
     using TensorStorage = TensorStorageImpl;
@@ -117,7 +101,7 @@ public:
 
   // Host side epilogue arguments
   struct Arguments {
-    ElementO const* ptr_O;
+    ElementO const *ptr_O;
     StrideO dO;
   };
 
@@ -131,65 +115,44 @@ public:
   //
 
   template <class ProblemShape>
-  static constexpr Params
-  to_underlying_arguments(
-      ProblemShape const& problem_shape,
-      Arguments const& args,
-      [[maybe_unused]] void* workspace) {
+  static constexpr Params to_underlying_arguments(ProblemShape const &problem_shape, Arguments const &args,
+                                                  [[maybe_unused]] void *workspace) {
     auto [batch, num_heads, seq_len, head_size] = problem_shape;
 
     XE_Copy_O xe_store_o = {};
-    xe_store_o = make_xe_2d_copy(Copy_Atom<Copy_Traits<CopyOpO, StrideO>, ElementO>{}.with(
-            make_tensor(make_gmem_ptr(static_cast<ElementO const*>(args.ptr_O)), make_layout(make_shape(seq_len, head_size, batch * num_heads), args.dO))),
-                                Layout<Shape<_1, Int<SubgroupSize>>>{});
+    xe_store_o = make_xe_2d_copy(Copy_Atom<Copy_Traits<CopyOpO, StrideO>, ElementO>{}.with(make_tensor(
+                                     make_gmem_ptr(static_cast<ElementO const *>(args.ptr_O)),
+                                     make_layout(make_shape(seq_len, head_size, batch * num_heads), args.dO))),
+                                 Layout<Shape<_1, Int<SubgroupSize>>>{});
 
     return {
-      xe_store_o,
+        xe_store_o,
     };
   }
 
   template <class ProblemShape>
-  static size_t
-  get_workspace_size(ProblemShape const& problem_shape, Arguments const& args) {
+  static size_t get_workspace_size(ProblemShape const &problem_shape, Arguments const &args) {
     return 0;
   }
 
   template <class ProblemShape>
-  static cutlass::Status
-  initialize_workspace(ProblemShape const& problem_shape, Arguments const& args, void* workspace, cudaStream_t stream, 
-    CudaHostAdapter* cuda_adapter = nullptr) {
+  static cutlass::Status initialize_workspace(ProblemShape const &problem_shape, Arguments const &args, void *workspace,
+                                              cudaStream_t stream, CudaHostAdapter *cuda_adapter = nullptr) {
     return Status::kSuccess;
   }
 
   template <class ProblemShape>
-  CUTLASS_HOST_DEVICE static bool
-  can_implement(
-      ProblemShape const& problem_shape,
-      [[maybe_unused]] Arguments const& args) {
+  CUTLASS_HOST_DEVICE static bool can_implement(ProblemShape const &problem_shape,
+                                                [[maybe_unused]] Arguments const &args) {
     return true;
   }
 
   CUTLASS_HOST_DEVICE
-  CollectiveEpilogueAttention(Params const& params_, TensorStorage const&)
-      : params(params_) {}
+  CollectiveEpilogueAttention(Params const &params_, TensorStorage const &) : params(params_) {}
 
-  template <
-      class ProblemShape,
-      class TileCoord,
-      class FragOut,
-      class FragMax,
-      class FragSum,
-      class TiledMma>
-  CUTLASS_DEVICE void
-  operator()(
-      ProblemShape problem_shape,
-      TileCoord tile_coord,
-      FragOut &out,
-      FragMax const &max,
-      FragSum &sum,
-      TiledMma tiled_mma,
-      ElementCompute const &softmax_scale)
-  {
+  template <class ProblemShape, class TileCoord, class FragOut, class FragMax, class FragSum, class TiledMma>
+  CUTLASS_DEVICE void operator()(ProblemShape problem_shape, TileCoord tile_coord, FragOut &out, FragMax const &max,
+                                 FragSum &sum, TiledMma tiled_mma, ElementCompute const &softmax_scale) {
 
     using namespace cute;
 
@@ -200,7 +163,7 @@ public:
     static constexpr auto ATOM_M = get<1>(typename TiledMma::ThrLayoutVMNK{}.shape());
     static constexpr auto ATOM_N = get<2>(typename TiledMma::ThrLayoutVMNK{}.shape());
     static constexpr auto ATOM_K = get<3>(typename TiledMma::ThrLayoutVMNK{}.shape());
-    
+
     static constexpr auto SG_M = ceil_div(BLK_M, ATOM_M);
     static constexpr auto SG_N = ceil_div(BLK_N, ATOM_N);
     static constexpr auto SG_K = ceil_div(BLK_K, ATOM_K);
@@ -217,7 +180,7 @@ public:
     auto n_offset = n_coord * BLK_N + (get_sub_group_id() % ATOM_N) * SG_N;
     auto l_offset = l_coord;
     auto g = syclcompat::get_nd_item<1>().get_sub_group();
-    
+
     CUTLASS_PRAGMA_UNROLL
     for (int y = 0; y < FragsM; y++) {
       CUTLASS_PRAGMA_UNROLL
@@ -236,17 +199,15 @@ public:
     // Indexing variables
     auto [batch, num_heads, seq_len, head_size] = problem_shape;
 
-    Tensor tOi = params.xe_store_o.get_pvc_tensor(
-            make_coord(m_offset, n_offset, l_coord),
-            make_shape(_, Int<FragsM>{}, Int<FragsN>{}));
+    Tensor tOi = params.xe_store_o.get_pvc_tensor(make_coord(m_offset, n_offset, l_coord),
+                                                  make_shape(_, Int<FragsM>{}, Int<FragsN>{}));
 
     copy(params.xe_store_o, out, tOi);
   }
 
 private:
-  Params const& params;
+  Params const &params;
 };
-
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
