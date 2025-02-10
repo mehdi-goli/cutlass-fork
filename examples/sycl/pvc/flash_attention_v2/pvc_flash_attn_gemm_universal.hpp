@@ -132,7 +132,7 @@ public:
   static constexpr int SG_K = CollectiveMainloop::SG_K; // 64
 
   static_assert(ATOM_K * BLK_N == ATOM_N * BLK_K,
-                " The QKV multiplication in this implementation requires the squar block computation in per subgroup.");
+                "The QKV multiplication in this implementation requires the squar block computation in per subgroup.");
 
   static constexpr int Vec = (get<0>(MmaAtomShape()) * get<1>(MmaAtomShape())) / SubgroupSize; // 8
   static constexpr int FragsM = get<0>(SubgroupTileShape{}) / get<0>(MmaAtomShape());          // 2
