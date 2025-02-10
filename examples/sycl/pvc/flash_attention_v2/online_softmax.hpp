@@ -81,7 +81,7 @@ template <typename Element> struct Softmax {
         maxptr = sycl::max(maxptr, src(base_indx));
         src(base_indx) *= params.scale;
       }
-      maxptr = {reduce_over_group(g, maxptr, sycl::maximum<>())};
+      maxptr = reduce_over_group(g, maxptr, sycl::maximum<>());
       if (indx == g.get_local_id()[0]) {
         max = maxptr;
       }
