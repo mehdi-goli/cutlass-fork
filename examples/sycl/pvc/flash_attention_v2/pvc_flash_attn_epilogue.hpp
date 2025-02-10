@@ -119,13 +119,11 @@ public:
   struct Arguments {
     ElementO const* ptr_O;
     StrideO dO;
-    ElementLSE* ptr_LSE;
   };
 
   // Device side epilogue params
   struct Params {
     XE_Copy_O xe_store_o;
-    ElementLSE* ptr_LSE;
   };
 
   //
@@ -147,7 +145,6 @@ public:
 
     return {
       xe_store_o,
-      args.ptr_LSE
     };
   }
 
@@ -177,23 +174,22 @@ public:
       : params(params_) {}
 
   template <
-  class ProblemShape,
-  class TileCoord,
-  class FragOut,
-  class FragMax,
-  class FragSum,
-  class TiledMma
-  >
+      class ProblemShape,
+      class TileCoord,
+      class FragOut,
+      class FragMax,
+      class FragSum,
+      class TiledMma>
   CUTLASS_DEVICE void
-  operator() (
-    ProblemShape problem_shape,
-    TileCoord tile_coord,
-    FragOut &out,
-    FragMax const &max,
-    FragSum &sum,
-    TiledMma tiled_mma,
-    ElementLSE const& softmax_scale
-  ) {
+  operator()(
+      ProblemShape problem_shape,
+      TileCoord tile_coord,
+      FragOut &out,
+      FragMax const &max,
+      FragSum &sum,
+      TiledMma tiled_mma,
+      ElementCompute const &softmax_scale)
+  {
 
     using namespace cute;
 
@@ -227,12 +223,9 @@ public:
       CUTLASS_PRAGMA_UNROLL
       for (int x = 0; x < Vec; x++) {
         int indx = y * Vec + x;
-        ElementLSE cur_sum = reduce_over_group(g, sum(indx), sycl::plus<>()); 
-        ElementO cur_scale = (cur_sum == 0.f || cur_sum != cur_sum) ? 1.f : sycl::native::recip(cur_sum);
-        ElementLSE curr_scale_bcast = group_broadcast(g, max, indx);
-        // Tensor tLSEr = from now on sum can be reused for;
-        sum(indx) = cur_sum == 0.f ? -INFINITY : curr_scale_bcast * softmax_scale + sycl::native::log(cur_sum);
-
+        auto cur_sum = reduce_over_group(g, sum(indx), sycl::plus<>());
+        auto cur_scale = (cur_sum == 0.f || cur_sum != cur_sum) ? 1.f : sycl::native::recip(cur_sum);
+        auto curr_scale_bcast = group_broadcast(g, max, indx);
         CUTLASS_PRAGMA_UNROLL
         for (int z = 0; z < FragsN; z++) {
           out(x, y, z) *= cur_scale;
@@ -248,21 +241,6 @@ public:
             make_shape(_, Int<FragsM>{}, Int<FragsN>{}));
 
     copy(params.xe_store_o, out, tOi);
-
-    const int lse_offset = m_offset + l_coord * seq_len;
-
-    auto lse_ptr = params.ptr_LSE + lse_offset;
-
-    const int lane_id = static_cast<int>(g.get_local_id()[0]);
-
-    // use the entire sub_group to write lse since all
-    // work items within subgroup have the same sum() data stored
-    // in registers
-    CUTLASS_PRAGMA_UNROLL
-    for (int i = 0; i < cute::size(sum); i += SubgroupSize) {
-      // Tensor tLSEr replacement by sum ;
-      *(lse_ptr + i + lane_id) = sum(i);
-    }
   }
 
 private:

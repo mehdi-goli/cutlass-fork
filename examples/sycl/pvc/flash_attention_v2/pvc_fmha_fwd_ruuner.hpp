@@ -114,7 +114,6 @@ struct Options {
   using LayoutK = cutlass::layout::ColumnMajor;
   using LayoutV = cutlass::layout::RowMajor;
   using LayoutO = cutlass::layout::RowMajor;
-  using LayoutLSE = cutlass::layout::RowMajor;
 
 template <
   class GemmKernel
@@ -153,7 +152,6 @@ struct ExampleRunner {
   cutlass::DeviceAllocation<ElementK> block_K;
   cutlass::DeviceAllocation<ElementV> block_V;
   cutlass::DeviceAllocation<ElementOutput> block_O;
-  cutlass::DeviceAllocation<ElementOutput> block_lse;
   cutlass::DeviceAllocation<ElementOutput> block_ref_O;
 
   //
@@ -313,7 +311,6 @@ struct ExampleRunner {
     block_V.reset(count);
     block_O.reset(count);
     block_ref_O.reset(count);
-    block_lse.reset(count);
 
     initialize_block(block_Q, seed + 2023);
     initialize_block(block_K, seed + 2022); //assume K is already transposed
@@ -350,7 +347,7 @@ struct ExampleRunner {
       problem_size,
       {block_Q.get(), stride_Q, block_K.get(), stride_K, block_V.get(), stride_V},
       {options.softmax_scale},
-      {block_O.get(), stride_O, block_lse.get()},
+      {block_O.get(), stride_O},
       hw_info
     };
 

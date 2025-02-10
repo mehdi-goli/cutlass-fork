@@ -323,9 +323,9 @@ public:
     for (int i = 0; i < k_tile_count; i++) {
         prefetch(params.mainloop.gmem_prefetch_q, prefetch_iter_q(_, _, _, i));
     }
-    const auto Prefetch_per_workgroup = DispatchPolicy::Stages; // cute::min(nblock_limit, DispatchPolicy::Stages);
     CUTLASS_PRAGMA_UNROLL
-    for (int i = 0; i < Prefetch_per_workgroup; i++) {
+    for (int i = 0; i < DispatchPolicy::Stages; i++)
+    {
       CUTLASS_PRAGMA_UNROLL
       for (int j = 0; j < iter_over_head_count; j++) {
           prefetch(params.mainloop.gmem_prefetch_k, prefetch_iter_k(_, _, _, i, j));
@@ -333,7 +333,7 @@ public:
     }
 
     CUTLASS_PRAGMA_UNROLL
-    for (int i = 0; i < Prefetch_per_workgroup; i++) {
+    for (int i = 0; i <  DispatchPolicy::Stages; i++) {
         prefetch(params.mainloop.gmem_prefetch_v, prefetch_iter_v(_, _, _, i));
     }
 
@@ -409,12 +409,13 @@ public:
       auto gV = local_tile(mV_nk, blk_shape, make_coord(0, 0, _), Step< X, _1, _1>{});
       auto tile_coord_PV = make_coord(0, head_size_coord, _, blk_l_coord);
       collective_mma.mmaPV(tile_coord_PV, out_reg, tPr, gV, out_reg, 1, nblock, params.mainloop);
-      if(nblock + Prefetch_per_workgroup < nblock_limit ) {
+      if (nblock + DispatchPolicy::Stages < nblock_limit)
+      {
         CUTLASS_PRAGMA_UNROLL
         for (int j = 0; j < iter_over_head_count; j++) {
-            prefetch(params.mainloop.gmem_prefetch_k, prefetch_iter_k(_, _, _, nblock + Prefetch_per_workgroup, j));
+          prefetch(params.mainloop.gmem_prefetch_k, prefetch_iter_k(_, _, _, nblock + DispatchPolicy::Stages, j));
         }
-        prefetch(params.mainloop.gmem_prefetch_v, prefetch_iter_v(_,_,_,nblock + Prefetch_per_workgroup));
+        prefetch(params.mainloop.gmem_prefetch_v, prefetch_iter_v(_, _, _, nblock + DispatchPolicy::Stages));
       }
       barrier_wait(barrier_scope);
     }
