@@ -271,14 +271,14 @@ struct CollectiveMma<MainloopIntelPVC<Stages>, TileShape_, ElementA_, StrideA_, 
     auto sub_group_id = get_sub_group_id();
     //<k=4,M=8> x <k=8,M=32>
     auto prefetch_a_coordinate =
-        is_A_transposed ? make_coord(static_cast<int>(k_start_idx + (sub_group_id / get<1>(PrefetchAThrShape{})) *
+        is_A_transposed ? make_coord(static_cast<int>(k_start_idx * BLK_K + (sub_group_id / get<1>(PrefetchAThrShape{})) *
                                                                         get<0>(PrefetchATileSize{})),
                                      static_cast<int>((m_idx * BLK_M + ((sub_group_id % get<1>(PrefetchAThrShape{})) *
                                                                         get<1>(PrefetchATileSize{})))),
                                      l_coord)
                         : make_coord(static_cast<int>(m_idx * BLK_M + ((sub_group_id / get<1>(PrefetchAThrShape{})) *
                                                                        get<0>(PrefetchATileSize{}))),
-                                     static_cast<int>(k_start_idx + (sub_group_id % get<1>(PrefetchAThrShape{})) *
+                                     static_cast<int>(k_start_idx * BLK_K + (sub_group_id % get<1>(PrefetchAThrShape{})) *
                                                                         get<1>(PrefetchATileSize{})),
                                      l_coord);
     // subgroup arranged 4x2 to load 128x64 in 2 load load (each 32X32)
@@ -293,10 +293,10 @@ struct CollectiveMma<MainloopIntelPVC<Stages>, TileShape_, ElementA_, StrideA_, 
         is_B_transposed
             ? make_coord(static_cast<int>(n_idx * BLK_N +
                                           ((sub_group_id / get<1>(PrefetchBThrShape{})) * get<0>(PrefetchBTileSize{}))),
-                         static_cast<int>(k_start_idx +
+                         static_cast<int>(k_start_idx * BLK_K +
                                           (sub_group_id % get<1>(PrefetchBThrShape{})) * get<1>(PrefetchBTileSize{})),
                          l_coord)
-            : make_coord(static_cast<int>(k_start_idx +
+            : make_coord(static_cast<int>(k_start_idx * BLK_K +
                                           (sub_group_id / get<1>(PrefetchBThrShape{})) * get<0>(PrefetchBTileSize{})),
                          static_cast<int>(n_idx * BLK_N +
                                           ((sub_group_id % get<1>(PrefetchBThrShape{})) * get<1>(PrefetchBTileSize{}))),
@@ -319,7 +319,7 @@ struct CollectiveMma<MainloopIntelPVC<Stages>, TileShape_, ElementA_, StrideA_, 
     }
 
     CUTLASS_PRAGMA_UNROLL
-    for (int k_tile = k_start_idx; k_tile < k_tile_count + k_start_idx; k_tile++) {
+    for (int k_tile = k_start_idx; k_tile < k_tile_count + k_start_idx; k_tile++, prefetch_k++) {
       barrier_arrive(barrier_scope);
       // Copy gmem to rmem for the first k_tile
       copy(tiled_copy_b, copy_iter_b(_, _, _, k_tile), copy_tCrB);
@@ -328,7 +328,6 @@ struct CollectiveMma<MainloopIntelPVC<Stages>, TileShape_, ElementA_, StrideA_, 
       if (prefetch_k < k_tile_count) {
         prefetch(tiled_prefetch_a, prefetch_iter_a(_, _, _, prefetch_k));
         prefetch(tiled_prefetch_b, prefetch_iter_b(_, _, _, prefetch_k));
-        prefetch_k++;
       }
 
       cute::gemm(tiled_mma, mma_tCrA, mma_tCrB, accum);
