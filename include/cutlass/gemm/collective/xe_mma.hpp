@@ -63,8 +63,8 @@ template <int Stages, class TileShape_, class ElementA_, class StrideA_, class E
 struct CollectiveMma<MainloopIntelPVC<Stages>, TileShape_, ElementA_, StrideA_, ElementB_, StrideB_, TiledMma_,
                      GmemTiledCopyA_, SmemLayoutAtomA_, SmemCopyAtomA_, TransformA_, GmemTiledCopyB_, SmemLayoutAtomB_,
                      SmemCopyAtomB_, TransformB_> {
-#define barrier_arrive(scope) __spirv_ControlBarrierArriveINTEL(scope, 0, 0);
-#define barrier_wait(scope) __spirv_ControlBarrierWaitINTEL(scope, 0, 0);
+CUTLASS_DEVICE void barrier_arrive(int scope) { __spirv_ControlBarrierArriveINTEL(scope, 0, 0); }
+CUTLASS_DEVICE void barrier_wait(int scope) { __spirv_ControlBarrierWaitINTEL(scope, 0, 0); }
   //
   // Type Aliases
   //
