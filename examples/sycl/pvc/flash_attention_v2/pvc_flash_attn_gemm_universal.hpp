@@ -363,8 +363,7 @@ public:
       barrier_wait(barrier_scope);
     }
     if constexpr (CausalMask) {
-      // BAN Matrix
-      //int nblock = nblock_limit - 1;
+      // BAND Matrix
       // 1) Load K (performed inside mmaQK)
       // 2) Create Tensor S
       auto gK = local_tile(mK_nk, blk_shape, make_coord(0, 0, _), Step<X, _1, _1>{});
