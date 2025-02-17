@@ -227,10 +227,7 @@ struct CollectiveMma<
   }
 
   /// Perform a subgroup-scoped matrix multiply-accumulate
-  template <
-    int PrefetchStrideA,
-    int PrefetchStrideB,
-    class FrgTensorD,
+  template <class FrgTensorD,
     class TensorA,
     class TensorB,
     class FrgTensorC,
